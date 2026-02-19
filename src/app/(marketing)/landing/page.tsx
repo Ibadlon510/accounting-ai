@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -10,8 +11,10 @@ import {
   Receipt,
   ArrowRight,
   CheckCircle2,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 const features = [
   { icon: Sparkles, title: "AI-Powered Automation", description: "Smart transaction classification, natural language entry, and automated bookkeeping that learns your patterns." },
@@ -34,6 +37,16 @@ const benefits = [
 ];
 
 export default function LandingPage() {
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsSignedIn(!!session);
+    });
+  }, []);
+
   return (
     <div className="min-h-screen">
       {/* Nav */}
@@ -50,16 +63,27 @@ export default function LandingPage() {
         </div>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/login">
-            <Button variant="ghost" className="h-9 rounded-xl text-[13px] font-medium text-text-secondary hover:text-text-primary">
-              Sign in
-            </Button>
-          </Link>
-          <Link href="/signup">
-            <Button className="h-9 rounded-xl bg-text-primary px-5 text-[13px] font-semibold text-white hover:bg-text-primary/90">
-              Get Started Free
-            </Button>
-          </Link>
+          {isSignedIn ? (
+            <Link href="/dashboard">
+              <Button className="h-9 gap-2 rounded-xl bg-text-primary px-5 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                My Dashboard
+              </Button>
+            </Link>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" className="h-9 rounded-xl text-[13px] font-medium text-text-secondary hover:text-text-primary">
+                  Sign in
+                </Button>
+              </Link>
+              <Link href="/signup">
+                <Button className="h-9 rounded-xl bg-text-primary px-5 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+                  Get Started Free
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </header>
 
@@ -82,18 +106,31 @@ export default function LandingPage() {
             — built for SMEs who want to focus on growth, not paperwork.
           </p>
           <div className="mt-8 flex items-center justify-center gap-4">
-            <Link href="/signup">
-              <Button className="h-12 gap-2 rounded-xl bg-text-primary px-8 text-[15px] font-semibold text-white hover:bg-text-primary/90">
-                Start Free Trial <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button variant="outline" className="h-12 rounded-xl border-border-subtle px-8 text-[15px] font-medium text-text-primary hover:bg-black/5">
-                View Demo
-              </Button>
-            </Link>
+            {isSignedIn ? (
+              <Link href="/dashboard">
+                <Button className="h-12 gap-2 rounded-xl bg-text-primary px-8 text-[15px] font-semibold text-white hover:bg-text-primary/90">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Go to Dashboard
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/signup">
+                  <Button className="h-12 gap-2 rounded-xl bg-text-primary px-8 text-[15px] font-semibold text-white hover:bg-text-primary/90">
+                    Start Free Trial <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/dashboard">
+                  <Button variant="outline" className="h-12 rounded-xl border-border-subtle px-8 text-[15px] font-medium text-text-primary hover:bg-black/5">
+                    View Demo
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
-          <p className="mt-4 text-[13px] text-text-meta">No credit card required • Free for 14 days</p>
+          {!isSignedIn && (
+            <p className="mt-4 text-[13px] text-text-meta">No credit card required • Free for 14 days</p>
+          )}
         </div>
       </section>
 
@@ -157,9 +194,13 @@ export default function LandingPage() {
             Join businesses saving hours every week with AI-powered bookkeeping.
           </p>
           <div className="mt-8">
-            <Link href="/signup">
+            <Link href={isSignedIn ? "/dashboard" : "/signup"}>
               <Button className="h-12 gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-8 text-[15px] font-semibold text-white hover:opacity-90">
-                Get Started Free <ArrowRight className="h-4 w-4" />
+                {isSignedIn ? (
+                  <><LayoutDashboard className="h-4 w-4" /> Go to Dashboard</>
+                ) : (
+                  <>Get Started Free <ArrowRight className="h-4 w-4" /></>
+                )}
               </Button>
             </Link>
           </div>
