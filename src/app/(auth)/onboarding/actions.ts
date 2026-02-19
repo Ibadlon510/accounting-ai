@@ -97,8 +97,18 @@ export async function createOrganizationAndLaunch(formData: {
     });
 
     return { ok: true, redirect: "/dashboard" };
-  } catch (e) {
-    console.error("Onboarding error:", e);
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to set up organization" };
+  } catch (e: unknown) {
+    const err = e as Record<string, unknown>;
+    console.error("Onboarding error:", {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      hint: err?.hint,
+      query: err?.query,
+      routine: err?.routine,
+    });
+    const msg = typeof err?.message === "string" ? err.message : "Failed to set up organization";
+    const code = typeof err?.code === "string" ? ` [${err.code}]` : "";
+    return { ok: false, error: `${msg}${code}` };
   }
 }

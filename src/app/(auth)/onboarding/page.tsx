@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError } from "@/lib/utils/toast-helpers";
 import { StyledSelect } from "@/components/ui/styled-select";
+import { ArrowLeft } from "lucide-react";
 
 const currencies = [
   { code: "AED", label: "AED — UAE Dirham" },
@@ -65,6 +67,13 @@ export default function OnboardingPage() {
 
   return (
     <div>
+      <Link
+        href="/login"
+        className="mb-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back
+      </Link>
       {/* Mobile logo */}
       <div className="mb-8 flex items-center gap-2 lg:hidden">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-orange-500">
