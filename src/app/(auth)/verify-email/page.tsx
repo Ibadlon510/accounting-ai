@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense, useState, useRef, useEffect } from "react";
+import { Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
+import { Mail, ArrowLeft, RefreshCw, CheckCircle2, PartyPopper } from "lucide-react";
 import Link from "next/link";
+import confetti from "canvas-confetti";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function VerifyEmailPage() {
   return (
@@ -15,24 +17,135 @@ export default function VerifyEmailPage() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Confetti burst helper                                              */
+/* ------------------------------------------------------------------ */
+function fireCelebration() {
+  const duration = 2500;
+  const end = Date.now() + duration;
+
+  const frame = () => {
+    confetti({
+      particleCount: 3,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0, y: 0.7 },
+      colors: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "#a855f7"],
+    });
+    confetti({
+      particleCount: 3,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1, y: 0.7 },
+      colors: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "#a855f7"],
+    });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  };
+
+  // Big initial burst
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "#a855f7"],
+  });
+  frame();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main content                                                       */
+/* ------------------------------------------------------------------ */
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
   const fromLogin = searchParams.get("from") === "login";
+  const alreadyConfirmed = searchParams.get("confirmed") === "true";
+  const userName = searchParams.get("name") ?? "";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
-  const [verified, setVerified] = useState(false);
+  const [verified, setVerified] = useState(alreadyConfirmed);
+  const [celebrationDone, setCelebrationDone] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasFiredConfetti = useRef(false);
+
+  // ---- Celebration trigger ----
+  const triggerCelebration = useCallback(() => {
+    if (hasFiredConfetti.current) return;
+    hasFiredConfetti.current = true;
+    setVerified(true);
+
+    // Stop polling
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    fireCelebration();
+
+    // Auto-redirect after celebration
+    setTimeout(() => {
+      setCelebrationDone(true);
+      router.push("/onboarding");
+      router.refresh();
+    }, 3500);
+  }, [router]);
+
+  // ---- If arrived with confirmed=true, fire immediately ----
+  useEffect(() => {
+    if (alreadyConfirmed) {
+      triggerCelebration();
+    }
+  }, [alreadyConfirmed, triggerCelebration]);
+
+  // ---- Listen for cross-tab session (email confirmed in another tab) ----
+  useEffect(() => {
+    if (verified || alreadyConfirmed || fromLogin) return;
+
+    const supabase = createClient();
+    if (!supabase) return;
+
+    // Supabase syncs sessions across tabs via localStorage.
+    // When the confirmation link creates a session in another tab,
+    // onAuthStateChange fires SIGNED_IN here.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          triggerCelebration();
+        }
+      }
+    );
+
+    // Also poll as a fallback (e.g. if user confirmed via a different browser)
+    pollingRef.current = setInterval(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email_confirmed_at) {
+          triggerCelebration();
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 4000);
+
+    return () => {
+      subscription.unsubscribe();
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [verified, alreadyConfirmed, fromLogin, triggerCelebration]);
 
   // Start cooldown on mount (skip for from=login so user can resend immediately)
   useEffect(() => {
-    if (!fromLogin) setResendCooldown(60);
-  }, [fromLogin]);
+    if (!fromLogin && !alreadyConfirmed) setResendCooldown(60);
+  }, [fromLogin, alreadyConfirmed]);
 
   // Countdown timer
   useEffect(() => {
@@ -43,8 +156,8 @@ function VerifyEmailContent() {
 
   // Auto-focus first input
   useEffect(() => {
-    inputRefs.current[0]?.focus();
-  }, []);
+    if (!verified && !fromLogin) inputRefs.current[0]?.focus();
+  }, [verified, fromLogin]);
 
   function handleChange(index: number, value: string) {
     if (!/^\d*$/.test(value)) return;
@@ -118,9 +231,7 @@ function VerifyEmailContent() {
       return;
     }
 
-    setVerified(true);
-    router.push("/onboarding");
-    router.refresh();
+    triggerCelebration();
   }
 
   async function handleResend() {
@@ -148,6 +259,9 @@ function VerifyEmailContent() {
     setResendLoading(false);
   }
 
+  /* ---------------------------------------------------------------- */
+  /*  No email → fallback                                             */
+  /* ---------------------------------------------------------------- */
   if (!email) {
     return (
       <div className="text-center">
@@ -159,7 +273,72 @@ function VerifyEmailContent() {
     );
   }
 
-  // From login: unconfirmed email — show simple "resend confirmation link" screen
+  /* ---------------------------------------------------------------- */
+  /*  Celebration screen                                               */
+  /* ---------------------------------------------------------------- */
+  if (verified) {
+    const displayName = userName || email.split("@")[0];
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="text-center"
+        >
+          {/* Success icon */}
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
+            className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30"
+          >
+            <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+          >
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <PartyPopper className="h-6 w-6 text-amber-500" />
+              <h1 className="text-[28px] font-bold text-text-primary">
+                Congratulations!
+              </h1>
+              <PartyPopper className="h-6 w-6 text-amber-500 -scale-x-100" />
+            </div>
+
+            <p className="text-[16px] font-medium text-text-primary">
+              Welcome aboard, {displayName}!
+            </p>
+            <p className="mt-2 text-[14px] text-text-secondary">
+              Your email has been verified successfully.
+            </p>
+            <p className="mt-1 text-[14px] text-text-secondary">
+              Let&apos;s set up your workspace now.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.2, duration: 0.5 }}
+            className="mt-8"
+          >
+            <div className="flex items-center justify-center gap-2 text-[13px] text-text-meta">
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+              {celebrationDone ? "Redirecting..." : "Taking you to setup..."}
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  From login: unconfirmed email screen                             */
+  /* ---------------------------------------------------------------- */
   if (fromLogin) {
     return (
       <div>
@@ -209,6 +388,9 @@ function VerifyEmailContent() {
     );
   }
 
+  /* ---------------------------------------------------------------- */
+  /*  Default: OTP entry screen                                        */
+  /* ---------------------------------------------------------------- */
   return (
     <div>
       {/* Mobile logo */}
@@ -239,8 +421,14 @@ function VerifyEmailContent() {
         <strong className="text-text-primary">{email}</strong>
       </p>
 
+      {/* Waiting indicator */}
+      <div className="mt-3 flex items-center justify-center gap-2 text-[12px] text-text-meta">
+        <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+        Listening for email confirmation...
+      </div>
+
       {/* OTP Input */}
-      <div className="mt-8 flex justify-center gap-2.5" onPaste={handlePaste}>
+      <div className="mt-6 flex justify-center gap-2.5" onPaste={handlePaste}>
         {otp.map((digit, i) => (
           <input
             key={i}
@@ -264,7 +452,7 @@ function VerifyEmailContent() {
         disabled={loading || verified || otp.some((d) => !d)}
         className="mt-6 h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
       >
-        {verified ? "Verified! Redirecting..." : loading ? "Verifying..." : "Verify Email"}
+        {loading ? "Verifying..." : "Verify Email"}
       </Button>
 
       {/* Resend */}

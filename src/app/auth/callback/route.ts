@@ -39,8 +39,17 @@ export async function GET(request: Request) {
     // Recovery flow → reset password page
     if (type === "recovery") {
       destination = "/reset-password";
+    }
+    // Email confirmation (signup / email) → celebration screen
+    else if (type === "signup" || type === "email") {
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email ? encodeURIComponent(user.email) : "";
+      const name = user?.user_metadata?.full_name
+        ? encodeURIComponent(user.user_metadata.full_name)
+        : "";
+      destination = `/verify-email?confirmed=true&email=${email}&name=${name}`;
     } else if (!next) {
-      // For signup/magiclink: check if user has an org, if not → onboarding
+      // For magiclink/OAuth: check if user has an org, if not → onboarding
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
