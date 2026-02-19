@@ -88,6 +88,9 @@ function VerifyEmailContent() {
 
     fireCelebration();
 
+    // Send welcome email (fire-and-forget)
+    fetch("/api/email/welcome", { method: "POST" }).catch(() => {});
+
     // Auto-redirect after celebration
     setTimeout(() => {
       setCelebrationDone(true);
