@@ -51,6 +51,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/signup") ||
     path.startsWith("/landing") ||
     path.startsWith("/verify-email") ||
+    path.startsWith("/forgot-password") ||
+    path.startsWith("/reset-password") ||
     path.startsWith("/auth");
 
   const isAuthPage =
@@ -64,6 +66,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/onboarding") ||
     path.startsWith("/workspaces") ||
     path.startsWith("/verify-email") ||
+    path.startsWith("/forgot-password") ||
+    path.startsWith("/reset-password") ||
     path.startsWith("/auth");
 
   // Protect all app routes except public pages and API routes (APIs handle their own auth)
