@@ -37,13 +37,19 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      setError(error.message);
+    if (signInError) {
+      const msg = signInError.message.toLowerCase();
+      if (msg.includes("email not confirmed") || msg.includes("confirm your email")) {
+        router.push(`/verify-email?email=${encodeURIComponent(email)}&from=login`);
+        setLoading(false);
+        return;
+      }
+      setError(signInError.message);
       setLoading(false);
       return;
     }

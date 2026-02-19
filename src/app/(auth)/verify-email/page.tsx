@@ -19,6 +19,7 @@ function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
+  const fromLogin = searchParams.get("from") === "login";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
@@ -28,10 +29,10 @@ function VerifyEmailContent() {
   const [verified, setVerified] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Start cooldown on mount
+  // Start cooldown on mount (skip for from=login so user can resend immediately)
   useEffect(() => {
-    setResendCooldown(60);
-  }, []);
+    if (!fromLogin) setResendCooldown(60);
+  }, [fromLogin]);
 
   // Countdown timer
   useEffect(() => {
@@ -154,6 +155,56 @@ function VerifyEmailContent() {
         <Link href="/signup" className="mt-3 inline-block text-[13px] font-medium text-text-primary hover:underline">
           Go to Sign Up
         </Link>
+      </div>
+    );
+  }
+
+  // From login: unconfirmed email — show simple "resend confirmation link" screen
+  if (fromLogin) {
+    return (
+      <div>
+        <div className="mb-8 flex items-center gap-2 lg:hidden">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-white" stroke="currentColor" strokeWidth={2.5}>
+              <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[17px] font-bold text-text-primary">Agar</span>
+            <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
+          </div>
+        </div>
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 dark:bg-amber-900/30">
+          <Mail className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+        </div>
+        <h1 className="text-center text-[24px] font-bold text-text-primary">
+          Email not confirmed
+        </h1>
+        <p className="mt-1 text-center text-[14px] text-text-secondary">
+          We need to verify <strong className="text-text-primary">{email}</strong> before you can sign in.
+          Click below to resend the confirmation link.
+        </p>
+        {error && <p className="mt-3 text-center text-[13px] text-error">{error}</p>}
+        <Button
+          onClick={handleResend}
+          disabled={resendCooldown > 0 || resendLoading}
+          className="mt-6 h-11 w-full gap-2 rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${resendLoading ? "animate-spin" : ""}`} />
+          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : resendLoading ? "Sending..." : "Resend confirmation email"}
+        </Button>
+        <p className="mt-4 text-center text-[12px] text-text-meta">
+          Check your inbox and spam folder. Click the link in the email to confirm, then sign in again.
+        </p>
+        <div className="mt-6 text-center">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-text-secondary hover:text-text-primary"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Sign In
+          </Link>
+        </div>
       </div>
     );
   }
