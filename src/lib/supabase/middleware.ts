@@ -49,6 +49,8 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
+    path.startsWith("/landing") ||
+    path.startsWith("/verify-email") ||
     path.startsWith("/auth");
 
   const isAuthPage =
@@ -56,6 +58,13 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/signup");
 
   const isApiRoute = path.startsWith("/api");
+
+  // Paths where authenticated users without an org are allowed
+  const isOnboardingAllowed =
+    path.startsWith("/onboarding") ||
+    path.startsWith("/workspaces") ||
+    path.startsWith("/verify-email") ||
+    path.startsWith("/auth");
 
   // Protect all app routes except public pages and API routes (APIs handle their own auth)
   if (!user && !isPublicPage && !isApiRoute) {
@@ -68,6 +77,16 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // Enforce onboarding: auth'd user without org cookie → /onboarding
+  if (user && !isPublicPage && !isApiRoute && !isOnboardingAllowed) {
+    const orgCookie = request.cookies.get("current_org_id")?.value;
+    if (!orgCookie) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
