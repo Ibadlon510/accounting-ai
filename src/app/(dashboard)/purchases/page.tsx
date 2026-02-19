@@ -6,6 +6,7 @@ import { getPurchaseStats } from "@/lib/mock/purchases-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Users, FileText, CreditCard, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { AiInsightBanner } from "@/components/ai/ai-insight-banner";
 
 export default function PurchasesPage() {
   const stats = getPurchaseStats();
@@ -20,7 +21,12 @@ export default function PurchasesPage() {
   return (
     <>
       <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Purchases" }]} />
-      <PageHeader title="Purchases" showActions={false} />
+      <PageHeader title="Purchases" />
+
+      <AiInsightBanner
+        message="Top expense category: IT Services & Consulting at AED 15,750 (38% of total)."
+        detail="AI detected a possible duplicate bill from Gulf IT Solutions — review recommended."
+      />
 
       <div className="grid grid-cols-12 gap-6 mb-8">
         {cards.map((card) => {

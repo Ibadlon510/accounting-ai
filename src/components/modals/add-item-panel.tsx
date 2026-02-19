@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { Package, Tag, DollarSign, Boxes, Info } from "lucide-react";
+import { StyledSelect } from "@/components/ui/styled-select";
 import type { Item } from "@/lib/mock/inventory-data";
 
 interface AddItemPanelProps {
@@ -78,7 +79,10 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
       <EntityPanelContent size="lg">
         <EntityPanelBody>
           <EntityPanelMain>
-            <EntityPanelHeader title="Add Inventory Item" showAiButton={false} />
+            <EntityPanelHeader
+              title="Add Inventory Item"
+              onAiClick={() => showSuccess("AI Auto-fill", "Paste a product URL or barcode to auto-fill item details with AI.")}
+            />
             <EntityPanelAvatar name={name || "New Item"} fallbackGradient="from-teal-400 to-cyan-500" />
 
             <EntityPanelFieldGroup>
@@ -92,19 +96,19 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
               </EntityPanelFieldRow>
               <EntityPanelFieldRow>
                 <EntityPanelField icon={<Boxes className="h-4 w-4" />} label="Type">
-                  <select value={type} onChange={(e) => setType(e.target.value as "product" | "service")} className="h-8 border-0 bg-transparent p-0 text-[14px] font-medium text-text-primary outline-none">
+                  <StyledSelect value={type} onChange={(e) => setType(e.target.value as "product" | "service")} className="h-8 border-0 bg-transparent p-0 text-[14px] font-medium text-text-primary">
                     <option value="product">Product</option>
                     <option value="service">Service</option>
-                  </select>
+                  </StyledSelect>
                 </EntityPanelField>
                 <EntityPanelField icon={<Package className="h-4 w-4" />} label="Unit">
-                  <select value={unit} onChange={(e) => setUnit(e.target.value)} className="h-8 border-0 bg-transparent p-0 text-[14px] font-medium text-text-primary outline-none">
+                  <StyledSelect value={unit} onChange={(e) => setUnit(e.target.value)} className="h-8 border-0 bg-transparent p-0 text-[14px] font-medium text-text-primary">
                     <option value="pcs">Pieces</option>
                     <option value="hrs">Hours</option>
                     <option value="kg">Kilograms</option>
                     <option value="box">Boxes</option>
                     <option value="set">Sets</option>
-                  </select>
+                  </StyledSelect>
                 </EntityPanelField>
               </EntityPanelFieldRow>
               <EntityPanelFieldRow>

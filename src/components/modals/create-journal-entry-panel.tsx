@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -16,10 +16,12 @@ import {
 } from "@/components/overlays/entity-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber, validateJournalEntry, calculateLineTotals } from "@/lib/accounting/engine";
 import { mockAccounts } from "@/lib/accounting/mock-data";
-import { Plus, Trash2, Info, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Info, CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
+import { StyledSelect } from "@/components/ui/styled-select";
 
 interface JournalLine {
   id: string;
@@ -28,6 +30,8 @@ interface JournalLine {
   debit: number;
   credit: number;
 }
+
+type AccountOption = { id: string; code: string; name: string };
 
 interface CreateJournalEntryPanelProps {
   open: boolean;
@@ -51,6 +55,25 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState<JournalLine[]>([emptyLine(), emptyLine()]);
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [smartEntryInput, setSmartEntryInput] = useState("");
+  const [smartEntryLoading, setSmartEntryLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      fetch("/api/org/chart-of-accounts")
+        .then((r) => (r.ok ? r.json() : { accounts: [] }))
+        .then((data) => {
+          const list = (data.accounts ?? []) as Array<{ id: string; code: string; name: string }>;
+          setAccounts(list.filter((a) => a.id && a.code));
+        })
+        .catch(() => setAccounts([]));
+    }
+  }, [open]);
+
+  const activeAccounts = accounts.length > 0
+    ? accounts
+    : mockAccounts.map((a) => ({ id: a.id, code: a.code, name: a.name }));
 
   function updateLine(index: number, field: keyof JournalLine, value: string | number) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, [field]: value } : line)));
@@ -65,6 +88,47 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
     setEntryDate(new Date().toISOString().slice(0, 10));
     setDescription(""); setReference("");
     setLines([emptyLine(), emptyLine()]);
+    setSmartEntryInput("");
+  }
+
+  async function handleSmartEntry() {
+    const nl = smartEntryInput.trim();
+    if (!nl) return;
+    setSmartEntryLoading(true);
+    try {
+      const res = await fetch("/api/ai/smart-entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showError(data?.error ?? "Could not parse that description.");
+        return;
+      }
+      const suggested = data.suggestedEntry;
+      if (!suggested?.lines?.length) {
+        showError("No lines returned. Try being more specific.");
+        return;
+      }
+      setEntryDate(suggested.date ?? entryDate);
+      setDescription(suggested.description ?? description);
+      setLines(
+        suggested.lines.map((l: { accountId: string; description?: string; debit?: number; credit?: number }) => ({
+          id: `jl-${Date.now()}-${Math.random()}`,
+          accountId: l.accountId ?? "",
+          description: l.description ?? "",
+          debit: Number(l.debit) ?? 0,
+          credit: Number(l.credit) ?? 0,
+        }))
+      );
+      setSmartEntryInput("");
+      showSuccess("Entry suggested", "Review and edit the lines, then post when ready.");
+    } catch {
+      showError("Something went wrong.");
+    } finally {
+      setSmartEntryLoading(false);
+    }
   }
 
   function handleSave() {
@@ -93,18 +157,42 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
     onOpenChange(false);
   }
 
-  const activeAccounts = mockAccounts.filter((a) => a.isActive);
-
   return (
     <EntityPanel open={open} onOpenChange={onOpenChange}>
       <EntityPanelContent size="xl">
         <EntityPanelBody>
           <EntityPanelMain>
-            <EntityPanelHeader title="Create Journal Entry" showAiButton={false} />
+            <EntityPanelHeader
+              title="Create Journal Entry"
+              onAiClick={() => document.getElementById("smart-entry-input")?.focus()}
+            />
 
-            <EntityPanelAiHint>
-              Describe a transaction in plain English and AI will suggest the debit/credit lines
-            </EntityPanelAiHint>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <EntityPanelAiHint className="flex-1">
+                Describe a transaction in plain English and AI will suggest the debit/credit lines
+              </EntityPanelAiHint>
+              <div className="flex gap-2">
+                <Input
+                  id="smart-entry-input"
+                  value={smartEntryInput}
+                  onChange={(e) => setSmartEntryInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSmartEntry())}
+                  placeholder="e.g. Office supplies 500 AED from bank"
+                  className="h-9 flex-1 min-w-[200px] rounded-xl border-border-subtle text-[13px]"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-xl border-[var(--accent-ai)]/30 text-[var(--accent-ai)] hover:bg-[var(--accent-ai)]/5"
+                  onClick={handleSmartEntry}
+                  disabled={!smartEntryInput.trim() || smartEntryLoading}
+                >
+                  {smartEntryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Suggest
+                </Button>
+              </div>
+            </div>
 
             {/* Header fields */}
             <div className="mb-6 grid grid-cols-3 gap-4">
@@ -134,16 +222,16 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
               {lines.map((line, i) => (
                 <div key={line.id} className="grid grid-cols-12 items-center gap-2 border-t border-border-subtle px-4 py-2">
                   <div className="col-span-4">
-                    <select
+                    <StyledSelect
                       value={line.accountId}
                       onChange={(e) => updateLine(i, "accountId", e.target.value)}
-                      className="h-8 w-full rounded-lg border border-border-subtle bg-transparent px-2 text-[12px] text-text-primary focus:outline-none focus:ring-2 focus:ring-text-primary/20"
+                      className="h-8 text-[12px]"
                     >
                       <option value="">Select account</option>
                       {activeAccounts.map((a) => (
                         <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
                       ))}
-                    </select>
+                    </StyledSelect>
                   </div>
                   <div className="col-span-3">
                     <Input value={line.description} onChange={(e) => updateLine(i, "description", e.target.value)} placeholder="Line memo" className="h-8 rounded-lg border-border-subtle text-[12px]" />

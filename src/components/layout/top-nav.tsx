@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Home,
@@ -15,6 +15,8 @@ import {
   Settings,
   Bell,
   Grid3X3,
+  FolderOpen,
+  LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { comingSoon } from "@/lib/utils/toast-helpers";
@@ -23,12 +25,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { createClient } from "@/lib/supabase/client";
+import { TokenMeter } from "@/components/ui/token-meter";
 
 const navItems = [
   { icon: Home, label: "Home", href: "/dashboard" },
   { icon: BookOpen, label: "Accounting", href: "/accounting" },
   { icon: FileText, label: "Sales", href: "/sales" },
   { icon: ShoppingCart, label: "Purchases", href: "/purchases" },
+  { icon: FolderOpen, label: "Documents", href: "/documents" },
   { icon: Package, label: "Inventory", href: "/inventory" },
   { icon: Landmark, label: "Banking", href: "/banking" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
@@ -38,6 +50,16 @@ const navItems = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    router.push("/login");
+    router.refresh();
+  }
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -97,8 +119,9 @@ export function TopNav() {
         })}
       </nav>
 
-      {/* Right: Profile */}
+      {/* Right: Token Meter + Profile */}
       <div className="flex items-center gap-3">
+        <TokenMeter />
         <div className="mr-1 text-right">
           <p className="text-[13px] font-semibold leading-tight text-text-primary">
             Demo User
@@ -107,12 +130,31 @@ export function TopNav() {
             Admin
           </p>
         </div>
-        <Avatar className="h-8 w-8 border border-border-subtle">
-          <AvatarImage src="" />
-          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-[11px] font-semibold text-white">
-            DU
-          </AvatarFallback>
-        </Avatar>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-text-primary/20">
+              <Avatar className="h-8 w-8 border border-border-subtle cursor-pointer">
+                <AvatarImage src="" />
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-[11px] font-semibold text-white">
+                  DU
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 rounded-xl">
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="cursor-pointer gap-2">
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer gap-2 text-error focus:text-error">
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex items-center gap-0.5">
           <button onClick={() => comingSoon("Notifications")} className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary">
             <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />

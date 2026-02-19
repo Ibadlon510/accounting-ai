@@ -56,7 +56,7 @@ export default function AccountingPage() {
       <Breadcrumbs
         items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Accounting" }]}
       />
-      <PageHeader title="Accounting" showActions={false} />
+      <PageHeader title="Accounting" />
 
       <div className="grid grid-cols-12 gap-6">
         {sections.map((section) => {

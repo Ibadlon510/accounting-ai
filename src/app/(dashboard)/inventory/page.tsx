@@ -10,6 +10,7 @@ import { Search, Plus, Package, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddItemPanel } from "@/components/modals/add-item-panel";
+import { AiInsightBanner } from "@/components/ai/ai-insight-banner";
 
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
@@ -33,7 +34,12 @@ export default function InventoryPage() {
   return (
     <>
       <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Inventory" }]} />
-      <PageHeader title="Inventory" showActions={false} />
+      <PageHeader title="Inventory" />
+
+      <AiInsightBanner
+        message="3 items are below reorder level — Dell Monitor, USB-C Hub, and Wireless Mouse."
+        detail="AI recommends creating purchase orders to replenish stock before the end of the month."
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-12 gap-6 mb-8">

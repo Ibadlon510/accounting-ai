@@ -14,6 +14,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+// Subscription plan for token economy (MVP)
+export const SUBSCRIPTION_PLANS = ["FREELANCER", "BUSINESS", "ENTERPRISE", "ARCHIVE"] as const;
+export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
+
 // ─── Organizations ───────────────────────────────────────────
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -25,6 +29,8 @@ export const organizations = pgTable("organizations", {
   phone: varchar("phone", { length: 30 }),
   email: varchar("email", { length: 255 }),
   logoUrl: text("logo_url"),
+  subscriptionPlan: varchar("subscription_plan", { length: 20 }).notNull().default("FREELANCER"),
+  tokenBalance: integer("token_balance").notNull().default(50),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -551,3 +557,61 @@ export const classificationRules = pgTable("classification_rules", {
   timesUsed: integer("times_used").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Document Vault (Zero-Entry / AI extraction) ───────────
+export const documentStatuses = ["PENDING", "PROCESSED", "FLAGGED", "ARCHIVED", "PROCESSING_FAILED"] as const;
+export type DocumentStatus = (typeof documentStatuses)[number];
+
+export const documents = pgTable("documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  s3Key: varchar("s3_key", { length: 512 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+  aiConfidence: numeric("ai_confidence", { precision: 5, scale: 4 }), // 0.0 to 1.0, null for manual
+  extractedData: jsonb("extracted_data"),
+  lastError: text("last_error"), // for PROCESSING_FAILED
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Document-derived accounting entry (1:1 after verify)
+export const documentTransactions = pgTable("document_transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  documentId: uuid("document_id")
+    .notNull()
+    .unique()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  totalAmount: numeric("total_amount", { precision: 18, scale: 2 }).notNull(),
+  vatAmount: numeric("vat_amount", { precision: 18, scale: 2 }).notNull(),
+  netAmount: numeric("net_amount", { precision: 18, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  merchantName: varchar("merchant_name", { length: 255 }).notNull(),
+  glAccountId: uuid("gl_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Smart Learning: merchant → GL preference per org
+export const merchantMaps = pgTable(
+  "merchant_maps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    merchantName: varchar("merchant_name", { length: 255 }).notNull(),
+    glAccountId: uuid("gl_account_id")
+      .notNull()
+      .references(() => chartOfAccounts.id),
+    confidence: numeric("confidence", { precision: 5, scale: 4 }).notNull().default("1"),
+    lastUsed: timestamp("last_used", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("merchant_maps_org_merchant_idx").on(t.organizationId, t.merchantName)]
+);

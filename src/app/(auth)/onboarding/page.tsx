@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { showError } from "@/lib/utils/toast-helpers";
+import { StyledSelect } from "@/components/ui/styled-select";
 
 const currencies = [
   { code: "AED", label: "AED — UAE Dirham" },
@@ -41,10 +43,24 @@ export default function OnboardingPage() {
     e.preventDefault();
     setLoading(true);
 
-    // TODO: Create organization in database via server action
-    // For now, redirect to dashboard
-    router.push("/dashboard");
-    router.refresh();
+    const { createOrganizationAndLaunch } = await import("./actions");
+    const result = await createOrganizationAndLaunch({
+      companyName: orgName,
+      currency,
+      fiscalYearStart: fiscalYear,
+      trn: trn || undefined,
+    });
+
+    if (result.ok && result.redirect) {
+      router.push(result.redirect);
+      router.refresh();
+    } else {
+      setLoading(false);
+      if (!result.ok && "error" in result) {
+        console.error(result.error);
+        showError("Onboarding failed", String(result.error));
+      }
+    }
   }
 
   return (
@@ -113,33 +129,33 @@ export default function OnboardingPage() {
               <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
                 Currency
               </label>
-              <select
+              <StyledSelect
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="h-11 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[14px] text-text-primary outline-none focus:ring-2 focus:ring-text-primary/20"
+                className="h-11 text-[14px]"
               >
                 {currencies.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.label}
                   </option>
                 ))}
-              </select>
+              </StyledSelect>
             </div>
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
                 Fiscal Year Start
               </label>
-              <select
+              <StyledSelect
                 value={fiscalYear}
                 onChange={(e) => setFiscalYear(Number(e.target.value))}
-                className="h-11 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[14px] text-text-primary outline-none focus:ring-2 focus:ring-text-primary/20"
+                className="h-11 text-[14px]"
               >
                 {fiscalMonths.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
                 ))}
-              </select>
+              </StyledSelect>
             </div>
           </div>
 

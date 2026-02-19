@@ -19,6 +19,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info } from "lucide-react";
+import { StyledSelect } from "@/components/ui/styled-select";
+import { AttachDocumentZone } from "@/components/workspace/attach-document-zone";
 import type { Supplier, BillLine } from "@/lib/mock/purchases-data";
 
 interface CreateBillPanelProps {
@@ -104,17 +106,20 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
       <EntityPanelContent size="xl">
         <EntityPanelBody>
           <EntityPanelMain>
-            <EntityPanelHeader title="Record Bill" showAiButton={false} />
+            <EntityPanelHeader
+              title="Record Bill"
+              onAiClick={() => showSuccess("AI Auto-fill", "Scan a supplier invoice or receipt to auto-fill bill details with AI.")}
+            />
 
             <div className="mb-6 grid grid-cols-4 gap-4">
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Supplier</Label>
-                <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="h-9 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-text-primary/20">
+                <StyledSelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
                   <option value="">Select supplier</option>
                   {suppliers.filter((s) => s.isActive).map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
-                </select>
+                </StyledSelect>
               </div>
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Bill Number</Label>
@@ -151,10 +156,10 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                     <Input type="number" min="0" step="0.01" value={line.unitPrice || ""} onChange={(e) => updateLine(i, "unitPrice", Number(e.target.value))} placeholder="0.00" className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
                   <div className="col-span-1">
-                    <select value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 w-full rounded-lg border border-border-subtle bg-transparent text-center text-[12px]">
+                    <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
                       <option value={5}>5%</option>
                       <option value={0}>0%</option>
-                    </select>
+                    </StyledSelect>
                   </div>
                   <div className="col-span-2 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
                   <div className="col-span-1 flex justify-center">
@@ -180,6 +185,35 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
 
           <EntityPanelSidebar>
             <EntityPanelSidebarHeader title="Bill Settings" />
+            <EntityPanelSidebarSection title="Source Document">
+              <AttachDocumentZone
+                onExtracted={(data) => {
+                  const inv = (data as Record<string, Record<string, unknown>>).invoice;
+                  const merchant = (data as Record<string, Record<string, unknown>>).merchant;
+                  if (inv?.date && typeof inv.date === "string") setIssueDate(inv.date);
+                  if (inv?.total_amount != null) {
+                    const total = Number(inv.total_amount);
+                    const tax = Number(inv.tax_amount ?? 0);
+                    const net = Number(inv.net_amount ?? total - tax);
+                    if (total > 0 && lines.length === 1 && !lines[0].description.trim()) {
+                      setLines([{
+                        ...lines[0],
+                        description: typeof merchant?.name === "string" ? `${merchant.name} — invoice` : "Scanned line item",
+                        quantity: 1,
+                        unitPrice: Math.round(net * 100) / 100,
+                        amount: Math.round(net * 100) / 100,
+                        taxRate: net > 0 ? Math.round((tax / net) * 100) : 5,
+                        taxAmount: Math.round(tax * 100) / 100,
+                      }]);
+                    }
+                  }
+                  if (merchant?.name && typeof merchant.name === "string" && !supplierId) {
+                    const match = suppliers.find((s) => s.name.toLowerCase().includes((merchant.name as string).toLowerCase()));
+                    if (match) setSupplierId(match.id);
+                  }
+                }}
+              />
+            </EntityPanelSidebarSection>
             <EntityPanelSidebarSection title="Currency">
               <p className="text-[14px] font-medium text-text-primary">AED — UAE Dirham</p>
             </EntityPanelSidebarSection>

@@ -6,6 +6,7 @@ import { getSalesStats } from "@/lib/mock/sales-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Users, FileText, CreditCard, AlertTriangle, ScrollText } from "lucide-react";
 import Link from "next/link";
+import { AiInsightBanner } from "@/components/ai/ai-insight-banner";
 
 export default function SalesPage() {
   const stats = getSalesStats();
@@ -20,7 +21,12 @@ export default function SalesPage() {
   return (
     <>
       <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Sales" }]} />
-      <PageHeader title="Sales" showActions={false} />
+      <PageHeader title="Sales" />
+
+      <AiInsightBanner
+        message="3 invoices are overdue for more than 30 days, totaling AED 142,500."
+        detail="AI recommends sending automated payment reminders to ADNOC, Emirates Steel, and Al Futtaim."
+      />
 
       <div className="grid grid-cols-12 gap-6 mb-8">
         {cards.map((card) => {

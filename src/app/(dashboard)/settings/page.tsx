@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ import {
   Bell,
   Palette,
 } from "lucide-react";
-import { showSuccess } from "@/lib/utils/toast-helpers";
+import { showSuccess, showError } from "@/lib/utils/toast-helpers";
+import { StyledSelect } from "@/components/ui/styled-select";
 
 const tabs = [
   { id: "organization", label: "Organization", icon: Building2 },
@@ -88,6 +89,55 @@ export default function SettingsPage() {
 }
 
 function OrganizationSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    currency: "AED",
+    taxRegistrationNumber: "",
+    fiscalYearStart: 1,
+  });
+
+  useEffect(() => {
+    fetch("/api/org/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.organization) {
+          const org = data.organization;
+          setForm({
+            name: org.name ?? "",
+            currency: org.currency ?? "AED",
+            taxRegistrationNumber: org.taxRegistrationNumber ?? "",
+            fiscalYearStart: org.fiscalYearStart ?? 1,
+          });
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/org/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        showSuccess("Settings saved", "Organization settings updated.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError("Save failed", data.error ?? "Failed to save settings.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="dashboard-card py-8 text-center text-text-secondary">Loading settings...</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="dashboard-card">
@@ -104,47 +154,11 @@ function OrganizationSettings() {
               Company Name
             </label>
             <Input
-              defaultValue="Al Noor Trading LLC"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] focus-visible:ring-text-primary/20"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
-                Email
-              </label>
-              <Input
-                type="email"
-                defaultValue="info@alnoor.ae"
-                className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] focus-visible:ring-text-primary/20"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
-                Phone
-              </label>
-              <Input
-                type="tel"
-                defaultValue="+971 4 XXX XXXX"
-                className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] focus-visible:ring-text-primary/20"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
-              Address
-            </label>
-            <Input
-              defaultValue="Dubai, United Arab Emirates"
-              className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] focus-visible:ring-text-primary/20"
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button onClick={() => showSuccess("Settings saved", "Organization profile updated.")} className="h-10 rounded-xl bg-text-primary px-6 text-[13px] font-semibold text-white hover:bg-text-primary/90">
-            Save Changes
-          </Button>
         </div>
       </div>
 
@@ -163,7 +177,8 @@ function OrganizationSettings() {
                 TRN (Tax Registration Number)
               </label>
               <Input
-                defaultValue="100XXXXXXXXX003"
+                value={form.taxRegistrationNumber}
+                onChange={(e) => setForm((f) => ({ ...f, taxRegistrationNumber: e.target.value }))}
                 className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] focus-visible:ring-text-primary/20"
               />
             </div>
@@ -171,29 +186,41 @@ function OrganizationSettings() {
               <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
                 Base Currency
               </label>
-              <select className="h-11 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[14px] text-text-primary outline-none focus:ring-2 focus:ring-text-primary/20">
+              <StyledSelect
+                value={form.currency}
+                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+                className="h-11 text-[14px]"
+              >
                 <option value="AED">AED — UAE Dirham</option>
                 <option value="USD">USD — US Dollar</option>
                 <option value="EUR">EUR — Euro</option>
-              </select>
+              </StyledSelect>
             </div>
           </div>
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
               Fiscal Year Start Month
             </label>
-            <select className="h-11 w-full max-w-xs rounded-xl border border-border-subtle bg-transparent px-3 text-[14px] text-text-primary outline-none focus:ring-2 focus:ring-text-primary/20">
+            <StyledSelect
+              value={form.fiscalYearStart}
+              onChange={(e) => setForm((f) => ({ ...f, fiscalYearStart: Number(e.target.value) }))}
+              className="h-11 max-w-xs text-[14px]"
+            >
               <option value="1">January</option>
               <option value="4">April</option>
               <option value="7">July</option>
               <option value="10">October</option>
-            </select>
+            </StyledSelect>
           </div>
         </div>
 
         <div className="mt-6 flex justify-end">
-          <Button onClick={() => showSuccess("Settings saved", "Tax & fiscal configuration updated.")} className="h-10 rounded-xl bg-text-primary px-6 text-[13px] font-semibold text-white hover:bg-text-primary/90">
-            Save Changes
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="h-10 rounded-xl bg-text-primary px-6 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+          >
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>

@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
-import { mockAccounts } from "@/lib/accounting/mock-data";
 import { Search, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { comingSoon } from "@/lib/utils/toast-helpers";
-import { Badge } from "@/components/ui/badge";
+
+type AccountRow = {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  isSystem: boolean;
+  taxCode: string | null;
+  typeName: string;
+  category: string;
+};
 
 const categoryColors: Record<string, string> = {
   asset: "bg-blue-100 text-blue-700",
@@ -19,12 +28,21 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function ChartOfAccountsPage() {
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(
     new Set(["Current Assets", "Current Liabilities", "Revenue", "Operating Expenses", "Equity"])
   );
 
-  const filtered = mockAccounts.filter(
+  useEffect(() => {
+    fetch("/api/org/chart-of-accounts")
+      .then((r) => (r.ok ? r.json() : { accounts: [] }))
+      .then((data) => setAccounts(data.accounts ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = accounts.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.code.includes(search)
@@ -33,7 +51,7 @@ export default function ChartOfAccountsPage() {
   // Group by account type
   const grouped = filtered.reduce(
     (acc, account) => {
-      const typeName = account.accountType?.name ?? "Other";
+      const typeName = account.typeName ?? "Other";
       if (!acc[typeName]) acc[typeName] = [];
       acc[typeName].push(account);
       return acc;
@@ -90,9 +108,13 @@ export default function ChartOfAccountsPage() {
         </div>
 
         {/* Grouped rows */}
-        {Object.entries(grouped).map(([typeName, accounts]) => {
+        {loading ? (
+          <div className="px-6 py-8 text-center text-text-secondary">Loading accounts...</div>
+        ) : Object.keys(grouped).length === 0 ? (
+          <div className="px-6 py-8 text-center text-text-secondary">No accounts found. Create an organization first.</div>
+        ) : Object.entries(grouped).map(([typeName, accounts]) => {
           const isExpanded = expandedTypes.has(typeName);
-          const category = accounts[0]?.accountType?.category ?? "asset";
+          const category = accounts[0]?.category ?? "asset";
 
           return (
             <div key={typeName}>

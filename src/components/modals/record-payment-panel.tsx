@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Info } from "lucide-react";
+import { StyledSelect } from "@/components/ui/styled-select";
 
 interface RecordPaymentPanelProps {
   open: boolean;
@@ -78,14 +79,14 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
             <div className="space-y-4">
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Invoice</Label>
-                <select value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); const inv = invoices.find((i) => i.id === e.target.value); if (inv) setAmount(inv.amountDue); }} className="h-10 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-text-primary/20">
+                <StyledSelect value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); const inv = invoices.find((i) => i.id === e.target.value); if (inv) setAmount(inv.amountDue); }} className="h-10">
                   <option value="">Select invoice</option>
                   {invoices.filter((i) => i.amountDue > 0).map((inv) => (
                     <option key={inv.id} value={inv.id}>
                       {inv.invoiceNumber} — {inv.customerName} — AED {formatNumber(inv.amountDue)} due
                     </option>
                   ))}
-                </select>
+                </StyledSelect>
               </div>
 
               {selectedInvoice && (
@@ -115,13 +116,13 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Payment Method</Label>
-                  <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-10 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-text-primary/20">
+                  <StyledSelect value={method} onChange={(e) => setMethod(e.target.value)} className="h-10">
                     <option value="bank_transfer">Bank Transfer</option>
                     <option value="cash">Cash</option>
                     <option value="cheque">Cheque</option>
                     <option value="credit_card">Credit Card</option>
                     <option value="online">Online Payment</option>
-                  </select>
+                  </StyledSelect>
                 </div>
                 <div>
                   <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Reference</Label>

@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info } from "lucide-react";
+import { StyledSelect } from "@/components/ui/styled-select";
 import type { Customer, InvoiceLine } from "@/lib/mock/sales-data";
 
 interface CreateInvoicePanelProps {
@@ -102,22 +103,24 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
       <EntityPanelContent size="xl">
         <EntityPanelBody>
           <EntityPanelMain>
-            <EntityPanelHeader title="Create Invoice" showAiButton={false} />
+            <EntityPanelHeader
+              title="Create Invoice"
+              onAiClick={() => showSuccess("AI Auto-fill", "Attach a document or paste text to auto-fill invoice details with AI.")}
+            />
 
             {/* Customer + dates row */}
             <div className="mb-6 grid grid-cols-3 gap-4">
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Customer</Label>
-                <select
+                <StyledSelect
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
-                  className="h-9 w-full rounded-xl border border-border-subtle bg-transparent px-3 text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-text-primary/20"
                 >
                   <option value="">Select customer</option>
                   {customers.filter((c) => c.isActive).map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
-                </select>
+                </StyledSelect>
               </div>
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Issue Date</Label>
@@ -151,10 +154,10 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
                     <Input type="number" min="0" step="0.01" value={line.unitPrice || ""} onChange={(e) => updateLine(i, "unitPrice", Number(e.target.value))} placeholder="0.00" className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
                   <div className="col-span-1">
-                    <select value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 w-full rounded-lg border border-border-subtle bg-transparent text-center text-[12px]">
+                    <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
                       <option value={5}>5%</option>
                       <option value={0}>0%</option>
-                    </select>
+                    </StyledSelect>
                   </div>
                   <div className="col-span-2 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
                   <div className="col-span-1 flex justify-center">

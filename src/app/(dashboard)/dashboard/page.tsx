@@ -5,6 +5,10 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { IncomeChart } from "@/components/charts/income-chart";
 import { ForecastBarChart } from "@/components/charts/forecast-bar-chart";
+import { ExpenseDonut } from "@/components/charts/expense-donut";
+import { TokenUsageChart } from "@/components/charts/token-usage-chart";
+import { Sparkles } from "lucide-react";
+import { AnomalyAlert } from "@/components/ai/anomaly-alert";
 import { getSalesStats } from "@/lib/mock/sales-data";
 import { getPurchaseStats } from "@/lib/mock/purchases-data";
 import { getInventoryStats } from "@/lib/mock/inventory-data";
@@ -22,6 +26,7 @@ import {
   AlertTriangle,
   Users,
   ArrowRight,
+  Zap,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -45,9 +50,16 @@ export default function DashboardPage() {
 
       <PageHeader title="Accounting Command Center" />
 
+      <AnomalyAlert
+        anomalies={[
+          { id: "a1", merchant: "Gulf IT Solutions", amount: 47250, avgAmount: 15750, multiplier: 3, date: "Feb 14, 2026" },
+        ]}
+        className="mb-5"
+      />
+
       {/* Row 1: Key metrics */}
-      <div className="grid grid-cols-12 gap-5">
-        <Link href="/sales" className="col-span-3">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-12 md:gap-5">
+        <Link href="/sales" className="md:col-span-3">
           <div className="dashboard-card group cursor-pointer transition-all hover:shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/10">
@@ -61,7 +73,7 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <Link href="/purchases" className="col-span-3">
+        <Link href="/purchases" className="md:col-span-3">
           <div className="dashboard-card group cursor-pointer transition-all hover:shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-error/10">
@@ -75,7 +87,7 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <Link href="/banking" className="col-span-3">
+        <Link href="/banking" className="md:col-span-3">
           <div className="dashboard-card group cursor-pointer transition-all hover:shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
@@ -89,7 +101,7 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <Link href="/vat" className="col-span-3">
+        <Link href="/vat" className="md:col-span-3">
           <div className="dashboard-card group cursor-pointer transition-all hover:shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
@@ -104,9 +116,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Row 2: Charts + Insights */}
-      <div className="mt-6 grid grid-cols-12 gap-6">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Income chart — 8 columns */}
-        <div className="col-span-8">
+        <div className="lg:col-span-8">
           <div className="dashboard-card">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -138,7 +150,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Right column — 4 cols */}
-        <div className="col-span-4 space-y-5">
+        <div className="lg:col-span-4 space-y-5">
           {/* Overdue alert */}
           {sales.overdueAmount > 0 && (
             <div className="dashboard-card border-l-4 border-l-error">
@@ -178,9 +190,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Row 3: Sales forecast */}
-      <div className="mt-6 grid grid-cols-12 gap-6">
-        <div className="col-span-6">
+      {/* Row 3: Sales Forecast + Expense Breakdown */}
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-12">
+        <div className="md:col-span-6">
           <div className="dashboard-card">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -196,11 +208,72 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="md:col-span-6">
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[15px] font-semibold text-text-primary">Expense Breakdown</h3>
+                <p className="text-[12px] text-text-meta">By GL category</p>
+              </div>
+            </div>
+            <ExpenseDonut />
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4: VAT Estimator + Token Usage + Quick Actions */}
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-12">
+        {/* VAT Liability Estimator */}
+        <div className="lg:col-span-4">
+          <div className="dashboard-card">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10">
+                <Receipt className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-text-primary">VAT Liability Estimator</h3>
+                <p className="text-[11px] text-text-meta">Q1 2026 projection</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-text-secondary">Output VAT (5% on sales)</span>
+                <span className="font-mono text-[13px] font-medium text-text-primary">AED {formatNumber(vat.totalOutputVat)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-text-secondary">Input VAT (recoverable)</span>
+                <span className="font-mono text-[13px] font-medium text-success">- AED {formatNumber(vat.totalInputVat)}</span>
+              </div>
+              <div className="border-t border-border-subtle pt-2 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-text-primary">Estimated Net Payable</span>
+                <span className="font-mono text-[18px] font-bold text-purple-600">AED {formatNumber(vat.netPayable)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-ai)]/5 px-2.5 py-1.5">
+                <Sparkles className="h-3 w-3 text-[var(--accent-ai)]" />
+                <p className="text-[11px] text-[var(--accent-ai)]">Based on {sales.invoiceCount + purchases.billCount} verified documents this quarter</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Token Usage */}
+        <div className="lg:col-span-4">
+          <div className="dashboard-card">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-ai)]/10">
+                <Zap className="h-4 w-4 text-[var(--accent-ai)]" />
+              </div>
+              <h3 className="text-[14px] font-semibold text-text-primary">AI Token Usage</h3>
+            </div>
+            <TokenUsageChart />
+          </div>
+        </div>
+
         {/* Quick actions */}
-        <div className="col-span-6">
+        <div className="md:col-span-2 lg:col-span-4">
           <div className="dashboard-card">
             <h3 className="text-[15px] font-semibold text-text-primary mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-2.5">
               {[
                 { label: "New Invoice", href: "/sales/invoices", icon: FileText, color: "text-success" },
                 { label: "Record Expense", href: "/purchases/bills", icon: ShoppingCart, color: "text-error" },
@@ -212,7 +285,7 @@ export default function DashboardPage() {
                 const Icon = action.icon;
                 return (
                   <Link key={action.label} href={action.href}>
-                    <div className="flex items-center gap-3 rounded-xl border border-border-subtle px-4 py-3 transition-all hover:bg-black/[0.02] hover:shadow-sm">
+                    <div className="flex items-center gap-3 rounded-xl border border-border-subtle px-4 py-2.5 transition-all hover:bg-black/[0.02] hover:shadow-sm">
                       <Icon className={`h-4 w-4 ${action.color}`} strokeWidth={1.8} />
                       <span className="text-[13px] font-medium text-text-primary">{action.label}</span>
                     </div>

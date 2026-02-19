@@ -113,6 +113,10 @@
   --error-light: #FEE2E2;
   --accent-pink: #F87171;
   --accent-yellow: #FBBF24;
+  --accent-ai: #3B82F6;
+  --confidence-high: #22C55E;
+  --confidence-medium: #FBBF24;
+  --confidence-low: #EF4444;
   --border-subtle: #E8E8EA;
   --border-card: #ECECEE;
 
@@ -167,6 +171,10 @@
   --error-light: rgba(248, 113, 113, 0.15);
   --accent-pink: #FB7185;
   --accent-yellow: #FDE68A;
+  --accent-ai: #60A5FA;
+  --confidence-high: #4ADE80;
+  --confidence-medium: #FDE68A;
+  --confidence-low: #F87171;
   --border-subtle: rgba(255, 255, 255, 0.1);
   --border-card: rgba(255, 255, 255, 0.08);
 
@@ -246,4 +254,25 @@
 
 .dashboard-card:hover {
   box-shadow: 0 6px 48px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+/* Confidence signaling borders for AI-filled fields */
+.field-confidence-high {
+  border-left: 3px solid var(--confidence-high);
+}
+.field-confidence-medium {
+  border-left: 3px solid var(--confidence-medium);
+  background: rgba(251, 191, 36, 0.04);
+}
+.field-confidence-low {
+  border-left: 3px solid var(--confidence-low);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+/* AI accent glow for sparkle buttons */
+.ai-glow {
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+}
+.dark .ai-glow {
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.3);
 }

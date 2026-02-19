@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,6 +68,13 @@ export default function LoginPage() {
         <p className="mt-1 text-[14px] text-text-secondary">
           Sign in to your account to continue
         </p>
+
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--accent-ai)]/5 px-3 py-2">
+          <Sparkles className="h-4 w-4 text-[var(--accent-ai)]" />
+          <p className="text-[12px] font-medium text-[var(--accent-ai)]">
+            AI-Powered Accounting for UAE Businesses
+          </p>
+        </div>
 
         {/* Quick Login */}
         <Button
