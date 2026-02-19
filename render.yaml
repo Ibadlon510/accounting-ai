@@ -1,27 +1,17 @@
+# Render Blueprint — optional: use "New > Blueprint" and point at this repo to create the service from this file.
+# Or create a Web Service manually and use the same settings below.
 services:
   - type: web
     name: accounting-ai
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: node
+    region: oregon
     plan: free
+
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+
     envVars:
-      - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: GOOGLE_GEMINI_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        sync: false
-      - key: DOCUMENT_VAULT_BUCKET
-        sync: false
+      - key: NODE_VERSION
+        value: "20"
+      # Add the rest in Render Dashboard: Supabase, DATABASE_URL, AI keys, AWS (Secret Files or Environment)
+      # NEXT_PUBLIC_* must be set in Render for client-side; others can be secret.
