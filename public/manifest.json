@@ -1,7 +1,7 @@
 {
-  "name": "AccountingAI",
-  "short_name": "AccountingAI",
-  "description": "AI-Powered Accounting for UAE Businesses",
+  "name": "Agar: Smart Accounting",
+  "short_name": "Agar",
+  "description": "AI-Powered Smart Accounting for Businesses",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#FFF7ED",

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 
 const features = [
   { icon: Sparkles, title: "AI-Powered Automation", description: "Smart transaction classification, natural language entry, and automated bookkeeping that learns your patterns." },
-  { icon: Receipt, title: "UAE VAT Native", description: "Built-in 5% VAT handling, FTA-compliant returns, input/output tracking, and automated tax calculations." },
+  { icon: Receipt, title: "VAT & Tax Ready", description: "Built-in VAT handling, compliant returns, input/output tracking, and automated tax calculations." },
   { icon: BarChart3, title: "Real-time Insights", description: "Live dashboards, P&L, balance sheets, and cash flow forecasts updated in real-time." },
   { icon: Shield, title: "Double-Entry Engine", description: "Immutable journal entries, automated trial balance verification, and complete audit trails." },
   { icon: Globe, title: "Multi-Currency", description: "Seamless AED, USD, EUR transactions with automatic exchange rate management." },
@@ -23,7 +23,7 @@ const features = [
 ];
 
 const benefits = [
-  "82-account UAE Chart of Accounts template",
+  "Pre-configured chart of accounts template",
   "Automated invoice generation with VAT",
   "Customer & supplier management",
   "Inventory tracking with reorder alerts",
@@ -44,7 +44,10 @@ export default function LandingPage() {
               <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <span className="text-[15px] font-bold text-text-primary">AccountingAI</span>
+          <div className="flex flex-col leading-tight">
+          <span className="text-[15px] font-bold text-text-primary">Agar</span>
+          <span className="text-[11px] font-medium text-text-secondary">Smart Accounting</span>
+        </div>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/login">
@@ -65,7 +68,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-3xl">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface px-4 py-1.5 text-[13px] text-text-secondary">
             <Sparkles className="h-3.5 w-3.5 text-accent-yellow" />
-            AI-powered accounting for UAE businesses
+            AI-powered smart accounting for businesses
           </div>
           <h1 className="text-[52px] font-extrabold leading-[1.1] tracking-tight text-text-primary">
             Accounting that{" "}
@@ -76,7 +79,7 @@ export default function LandingPage() {
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-[18px] leading-relaxed text-text-secondary">
             Smart bookkeeping, VAT automation, and real-time financial insights
-            — built for UAE SMEs who want to focus on growth, not paperwork.
+            — built for SMEs who want to focus on growth, not paperwork.
           </p>
           <div className="mt-8 flex items-center justify-center gap-4">
             <Link href="/signup">
@@ -126,10 +129,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-4xl">
           <div className="text-center mb-12">
             <h2 className="text-[36px] font-bold tracking-tight text-text-primary">
-              Built for UAE businesses
+              Built for modern businesses
             </h2>
             <p className="mt-3 text-[16px] text-text-secondary">
-              Pre-configured with UAE accounting standards and FTA compliance
+              Pre-configured with accounting standards and tax compliance
             </p>
           </div>
 
@@ -151,7 +154,7 @@ export default function LandingPage() {
             Ready to automate your accounting?
           </h2>
           <p className="mt-4 text-[16px] text-text-secondary">
-            Join UAE businesses saving hours every week with AI-powered bookkeeping.
+            Join businesses saving hours every week with AI-powered bookkeeping.
           </p>
           <div className="mt-8">
             <Link href="/signup">
@@ -172,9 +175,9 @@ export default function LandingPage() {
                 <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
               </svg>
             </div>
-            <span className="text-[13px] font-semibold text-text-primary">AccountingAI</span>
+            <span className="text-[13px] font-semibold text-text-primary">Agar</span>
           </div>
-          <p className="text-[12px] text-text-meta">© 2026 AccountingAI. All rights reserved.</p>
+          <p className="text-[12px] text-text-meta">© 2026 Agar. All rights reserved.</p>
         </div>
       </footer>
     </div>

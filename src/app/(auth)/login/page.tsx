@@ -59,9 +59,10 @@ export default function LoginPage() {
               <path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <span className="text-[17px] font-bold text-text-primary">
-            AccountingAI
-          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[17px] font-bold text-text-primary">Agar</span>
+            <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
+          </div>
         </div>
 
         <h1 className="text-[24px] font-bold text-text-primary">Welcome back</h1>
@@ -72,7 +73,7 @@ export default function LoginPage() {
         <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--accent-ai)]/5 px-3 py-2">
           <Sparkles className="h-4 w-4 text-[var(--accent-ai)]" />
           <p className="text-[12px] font-medium text-[var(--accent-ai)]">
-            AI-Powered Accounting for UAE Businesses
+            AI-Powered Smart Accounting for Businesses
           </p>
         </div>
 
@@ -86,7 +87,7 @@ export default function LoginPage() {
           Quick Login — Demo Mode
         </Button>
         <p className="mt-2 text-center text-[11px] text-text-meta">
-          Skip authentication and explore with sample UAE business data
+          Skip authentication and explore with sample business data
         </p>
 
         <div className="my-5 flex items-center gap-3">

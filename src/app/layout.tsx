@@ -11,9 +11,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "AccountingAI — Smart Accounting for UAE SMEs",
+  title: "Agar: Smart Accounting",
   description:
-    "AI-powered accounting software with UAE VAT compliance, automated bookkeeping, and real-time financial insights.",
+    "AI-powered accounting software with VAT and tax compliance, automated bookkeeping, and real-time financial insights.",
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#0F172A" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="AccountingAI" />
+        <meta name="apple-mobile-web-app-title" content="Agar" />
         <link rel="apple-touch-icon" href="/assets/icon-192.png" />
       </head>
       <body className={`${plusJakarta.variable} font-sans antialiased`}>

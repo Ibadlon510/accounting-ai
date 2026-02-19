@@ -81,9 +81,10 @@ export default function OnboardingPage() {
               <path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <span className="text-[17px] font-bold text-text-primary">
-            AccountingAI
-          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[17px] font-bold text-text-primary">Agar</span>
+            <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
+          </div>
         </div>
 
         <h1 className="text-[24px] font-bold text-text-primary">
@@ -164,7 +165,7 @@ export default function OnboardingPage() {
             disabled={loading}
             className="h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
           >
-            {loading ? "Setting up..." : "Launch AccountingAI"}
+            {loading ? "Setting up..." : "Launch Agar"}
           </Button>
         </form>
       </div>

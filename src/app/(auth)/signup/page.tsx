@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -26,13 +27,14 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
         },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -42,8 +44,40 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/onboarding");
-    router.refresh();
+    // If session exists, email confirmation is disabled — go straight in
+    if (data.session) {
+      router.push("/onboarding");
+      router.refresh();
+      return;
+    }
+
+    // Otherwise, email confirmation is required — show message
+    setEmailSent(true);
+    setLoading(false);
+  }
+
+  if (emailSent) {
+    return (
+      <div className="w-full max-w-[400px]">
+        <div className="dashboard-card text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100">
+            <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7 text-green-600" stroke="currentColor" strokeWidth={2}>
+              <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-[22px] font-bold text-text-primary">Check your email</h1>
+          <p className="mt-2 text-[14px] leading-relaxed text-text-secondary">
+            We sent a confirmation link to <strong className="text-text-primary">{email}</strong>.
+            Click it to activate your account, then sign in.
+          </p>
+          <Link href="/login">
+            <Button className="mt-6 h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90">
+              Go to Sign In
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -64,9 +98,10 @@ export default function SignupPage() {
               <path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <span className="text-[17px] font-bold text-text-primary">
-            AccountingAI
-          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[17px] font-bold text-text-primary">Agar</span>
+            <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
+          </div>
         </div>
 
         <h1 className="text-[24px] font-bold text-text-primary">

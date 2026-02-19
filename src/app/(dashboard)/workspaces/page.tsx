@@ -126,7 +126,7 @@ export default function WorkspacesPage() {
 
                     <div className="mt-2 flex items-center gap-5 text-[12px] text-text-secondary">
                       <span className="flex items-center gap-1.5">
-                        <Globe className="h-3.5 w-3.5" /> UAE · {org.currency}
+                        <Globe className="h-3.5 w-3.5" /> {org.currency}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5" /> FY starts {fiscalMonthNames[org.fiscalYearStart] ?? "Jan"}

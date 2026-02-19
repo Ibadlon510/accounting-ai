@@ -414,7 +414,7 @@ export default function DocumentVerifyPage() {
               <Input
                 value={form.merchantName}
                 onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))}
-                placeholder="e.g. Starbucks UAE"
+                placeholder="e.g. Starbucks"
                 className="h-9 rounded-lg border-border-subtle text-[13px]"
                 required
               />

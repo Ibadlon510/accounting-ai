@@ -83,7 +83,10 @@ export function TopNav() {
             <path d="M2 12l10 5 10-5" />
           </svg>
         </div>
-        <span className="text-[15px] font-bold text-text-primary">AccountingAI</span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-[15px] font-bold text-text-primary">Agar</span>
+          <span className="text-[11px] font-medium text-text-secondary">Smart Accounting</span>
+        </div>
       </Link>
 
       {/* Center: Navigation Pill */}
