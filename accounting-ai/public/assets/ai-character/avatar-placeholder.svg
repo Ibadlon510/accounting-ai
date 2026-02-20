@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Background gradient matching brand palette -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDE8E0"/>
+      <stop offset="50%" stop-color="#FAE0C8"/>
+      <stop offset="100%" stop-color="#F5F0EA"/>
+    </linearGradient>
+    <!-- Hair gradient - dark professional -->
+    <linearGradient id="hairGrad" x1="160" y1="60" x2="352" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1A1F2E"/>
+      <stop offset="100%" stop-color="#2D3348"/>
+    </linearGradient>
+    <!-- Skin tone -->
+    <linearGradient id="skinGrad" x1="200" y1="140" x2="312" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDDCC8"/>
+      <stop offset="100%" stop-color="#F5C6A8"/>
+    </linearGradient>
+    <!-- Suit gradient -->
+    <linearGradient id="suitGrad" x1="140" y1="340" x2="372" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <!-- Shirt -->
+    <linearGradient id="shirtGrad" x1="220" y1="330" x2="292" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F1F5F9"/>
+    </linearGradient>
+    <!-- Green accent glow (brand success color) -->
+    <radialGradient id="aiGlow" cx="256" cy="256" r="240" gradientUnits="userSpaceOnUse">
+      <stop offset="70%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="rgba(34,197,94,0.12)"/>
+    </radialGradient>
+    <!-- Eye shine -->
+    <radialGradient id="eyeShine" cx="0.35" cy="0.3" r="0.65">
+      <stop offset="0%" stop-color="#4ADE80"/>
+      <stop offset="60%" stop-color="#22C55E"/>
+      <stop offset="100%" stop-color="#166534"/>
+    </radialGradient>
+    <!-- Shadow filter -->
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur"/>
+      <feOffset dx="0" dy="4" result="offsetBlur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.15"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Sparkle filter for AI accent -->
+    <filter id="sparkleGlow">
+      <feGaussianBlur stdDeviation="3" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Circular background -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
+  <circle cx="256" cy="256" r="256" fill="url(#aiGlow)"/>
+
+  <!-- Clip to circle -->
+  <clipPath id="circleClip">
+    <circle cx="256" cy="256" r="248"/>
+  </clipPath>
+
+  <g clip-path="url(#circleClip)">
+
+    <!-- BODY / SUIT -->
+    <g filter="url(#softShadow)">
+      <!-- Shoulders & suit jacket -->
+      <path d="M100 512 C100 400, 160 350, 210 335 L256 330 L302 335 C352 350, 412 400, 412 512 Z" fill="url(#suitGrad)"/>
+      <!-- Lapels -->
+      <path d="M210 335 L240 390 L256 365 L272 390 L302 335 L256 330 Z" fill="url(#shirtGrad)"/>
+      <!-- Tie -->
+      <path d="M249 365 L256 420 L263 365 L256 355 Z" fill="#22C55E" opacity="0.9"/>
+      <!-- Tie knot -->
+      <circle cx="256" cy="360" r="5" fill="#16A34A"/>
+      <!-- Collar lines -->
+      <path d="M224 340 L240 380" stroke="#E2E8F0" stroke-width="1" fill="none" opacity="0.5"/>
+      <path d="M288 340 L272 380" stroke="#E2E8F0" stroke-width="1" fill="none" opacity="0.5"/>
+      <!-- Suit pocket square (green accent) -->
+      <path d="M170 410 L180 395 L190 408 L182 412 Z" fill="#22C55E" opacity="0.6"/>
+    </g>
+
+    <!-- NECK -->
+    <path d="M232 310 C232 330, 280 330, 280 310 L280 290 L232 290 Z" fill="url(#skinGrad)"/>
+
+    <!-- HEAD -->
+    <g filter="url(#softShadow)">
+      <!-- Face shape - anime-style oval -->
+      <ellipse cx="256" cy="220" rx="82" ry="96" fill="url(#skinGrad)"/>
+
+      <!-- Ears -->
+      <ellipse cx="174" cy="225" rx="14" ry="20" fill="#F5C6A8"/>
+      <ellipse cx="174" cy="225" rx="8" ry="13" fill="#EDBA9A"/>
+      <ellipse cx="338" cy="225" rx="14" ry="20" fill="#F5C6A8"/>
+      <ellipse cx="338" cy="225" rx="8" ry="13" fill="#EDBA9A"/>
+    </g>
+
+    <!-- HAIR -->
+    <g>
+      <!-- Back hair volume -->
+      <ellipse cx="256" cy="170" rx="100" ry="80" fill="url(#hairGrad)"/>
+      <!-- Top hair swept right (anime style) -->
+      <path d="M160 190 C160 110, 200 70, 260 65 C320 60, 360 90, 365 160 C365 170, 355 175, 345 170 C330 130, 290 95, 250 100 C210 105, 185 130, 175 175 C172 185, 160 185, 160 190 Z" fill="url(#hairGrad)"/>
+      <!-- Anime bangs/fringe -->
+      <path d="M180 180 C185 150, 200 135, 220 140 L210 180 Z" fill="url(#hairGrad)"/>
+      <path d="M205 175 C210 145, 230 128, 250 132 L235 178 Z" fill="url(#hairGrad)"/>
+      <path d="M230 172 C238 138, 260 122, 285 128 L265 175 Z" fill="url(#hairGrad)"/>
+      <path d="M260 172 C270 140, 295 130, 320 140 L295 178 Z" fill="url(#hairGrad)"/>
+      <path d="M290 175 C305 145, 330 142, 345 160 L320 182 Z" fill="url(#hairGrad)"/>
+      <!-- Hair shine highlights -->
+      <path d="M210 110 C225 95, 260 88, 280 92" stroke="rgba(255,255,255,0.15)" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M220 120 C240 108, 265 102, 290 105" stroke="rgba(255,255,255,0.08)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- FACE FEATURES -->
+    <g>
+      <!-- Eyebrows -->
+      <path d="M200 192 C210 185, 230 184, 240 188" stroke="#1A1F2E" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M272 188 C282 184, 302 185, 312 192" stroke="#1A1F2E" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+      <!-- Eyes - large anime style -->
+      <!-- Left eye -->
+      <ellipse cx="220" cy="215" rx="22" ry="18" fill="white"/>
+      <ellipse cx="222" cy="217" rx="14" ry="14" fill="url(#eyeShine)"/>
+      <ellipse cx="222" cy="217" rx="8" ry="8" fill="#0F172A"/>
+      <!-- Left eye shine -->
+      <ellipse cx="216" cy="211" rx="5" ry="4" fill="white" opacity="0.9"/>
+      <ellipse cx="227" cy="220" rx="2.5" ry="2" fill="white" opacity="0.5"/>
+      <!-- Left eyelid line -->
+      <path d="M198 205 C205 196, 235 194, 242 205" stroke="#1A1F2E" stroke-width="2" fill="none"/>
+      <!-- Left lower lash -->
+      <path d="M204 228 C215 232, 230 231, 238 226" stroke="#2D3348" stroke-width="1" fill="none" opacity="0.3"/>
+
+      <!-- Right eye -->
+      <ellipse cx="292" cy="215" rx="22" ry="18" fill="white"/>
+      <ellipse cx="290" cy="217" rx="14" ry="14" fill="url(#eyeShine)"/>
+      <ellipse cx="290" cy="217" rx="8" ry="8" fill="#0F172A"/>
+      <!-- Right eye shine -->
+      <ellipse cx="284" cy="211" rx="5" ry="4" fill="white" opacity="0.9"/>
+      <ellipse cx="295" cy="220" rx="2.5" ry="2" fill="white" opacity="0.5"/>
+      <!-- Right eyelid line -->
+      <path d="M270 205 C277 196, 307 194, 314 205" stroke="#1A1F2E" stroke-width="2" fill="none"/>
+      <!-- Right lower lash -->
+      <path d="M274 226 C285 232, 300 231, 310 226" stroke="#2D3348" stroke-width="1" fill="none" opacity="0.3"/>
+
+      <!-- Nose - subtle anime style -->
+      <path d="M254 240 L256 252 L260 249" stroke="#EDBA9A" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+      <!-- Mouth - gentle confident smile -->
+      <path d="M236 270 C244 280, 268 280, 276 270" stroke="#E8967A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <!-- Upper lip highlight -->
+      <path d="M244 272 C250 268, 262 268, 268 272" stroke="#EDBA9A" stroke-width="1" fill="none" opacity="0.5"/>
+
+      <!-- Subtle blush (anime style) -->
+      <ellipse cx="198" cy="242" rx="16" ry="8" fill="#F9A8A8" opacity="0.15"/>
+      <ellipse cx="314" cy="242" rx="16" ry="8" fill="#F9A8A8" opacity="0.15"/>
+    </g>
+
+    <!-- GLASSES (professional CPA touch) -->
+    <g stroke="#64748B" stroke-width="1.8" fill="none" opacity="0.7">
+      <rect x="193" y="199" width="56" height="36" rx="10"/>
+      <rect x="263" y="199" width="56" height="36" rx="10"/>
+      <path d="M249 215 C253 212, 259 212, 263 215"/>
+      <path d="M193 215 L176 212"/>
+      <path d="M319 215 L336 212"/>
+    </g>
+
+    <!-- AI SPARKLE ACCENT (brand element - near right temple) -->
+    <g filter="url(#sparkleGlow)" opacity="0.85">
+      <!-- 4-point star sparkle -->
+      <path d="M350 145 L353 138 L356 145 L363 148 L356 151 L353 158 L350 151 L343 148 Z" fill="#22C55E"/>
+      <path d="M365 130 L367 126 L369 130 L373 132 L369 134 L367 138 L365 134 L361 132 Z" fill="#4ADE80" opacity="0.7"/>
+      <path d="M340 128 L341 125 L342 128 L345 129 L342 130 L341 133 L340 130 L337 129 Z" fill="#4ADE80" opacity="0.5"/>
+    </g>
+
+  </g>
+
+  <!-- Outer ring accent -->
+  <circle cx="256" cy="256" r="250" stroke="url(#bgGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <circle cx="256" cy="256" r="253" stroke="#22C55E" stroke-width="0.5" fill="none" opacity="0.2"/>
+</svg>

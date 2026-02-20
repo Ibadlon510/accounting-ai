@@ -1,0 +1,10 @@
+{
+  "name": "accounting-ai-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix accounting-ai",
+    "build": "npm run build --prefix accounting-ai",
+    "start": "npm run start --prefix accounting-ai",
+    "lint": "npm run lint --prefix accounting-ai"
+  }
+}

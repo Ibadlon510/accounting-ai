@@ -1,0 +1,17 @@
+# Render Blueprint — optional: use "New > Blueprint" and point at this repo to create the service from this file.
+# Or create a Web Service manually and use the same settings below.
+services:
+  - type: web
+    name: accounting-ai
+    runtime: node
+    region: oregon
+    plan: free
+
+    buildCommand: npm install && npm run build && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
+    startCommand: node .next/standalone/server.js
+
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Add the rest in Render Dashboard: Supabase, DATABASE_URL, AI keys, AWS (Secret Files or Environment)
+      # NEXT_PUBLIC_* must be set in Render for client-side; others can be secret.
