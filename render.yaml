@@ -18,6 +18,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: HOSTNAME
+        value: "0.0.0.0"
       - key: DATABASE_URL
         fromDatabase:
           name: accounting-ai-db
@@ -27,6 +29,6 @@ services:
       # AUTH_URL must be set manually in Dashboard after first deploy:
       # e.g. https://accounting-ai.onrender.com
       - key: AUTH_URL
-        value: "https://accounting-ai.onrender.com"
+        value: "https://accounting-ai-u6xe.onrender.com"
       # Also set in Render Dashboard: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
       # GOOGLE_GEMINI_API_KEY, OPENAI_API_KEY, RESEND_API_KEY, AWS_* keys
