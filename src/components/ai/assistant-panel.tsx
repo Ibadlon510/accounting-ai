@@ -4,7 +4,6 @@ import { useState, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Maximize2,
   Minimize2,
   X,
   CloudUpload,
@@ -324,7 +323,7 @@ function ExpandedDropZone({
 // ─── Main Panel ─────────────────────────────────────────────
 export function AssistantPanel() {
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const [response, setResponse] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -411,164 +410,89 @@ export function AssistantPanel() {
     }
   }
 
-  // ─── Expanded view ──────────────────────────────────────────
-  if (expanded) {
+  // ─── Minimized: floating action button ─────────────────────
+  if (isMinimized) {
     return (
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col">
-        {/* Backdrop */}
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setExpanded(false)} />
-
-        {/* Panel */}
-        <div className="relative z-10 flex h-full flex-col glass-dark border-l border-white/10">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <div className="flex items-center gap-2.5">
-              <AiAvatar size="sm" showRing showGlow />
-              <h3 className="text-[15px] font-semibold text-white">AI Assistant</h3>
-            </div>
-            <button
-              onClick={() => setExpanded(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition-colors hover:text-white/80"
-            >
-              <Minimize2 className="h-4 w-4" strokeWidth={1.8} />
-            </button>
-          </div>
-
-          {/* Content (scrollable) */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            {/* Drop zone */}
-            <ExpandedDropZone onFilesSelected={handleExpandedFiles} />
-
-            {/* Upload progress / result */}
-            {fileState && (
-              <UploadProgress
-                fileState={fileState}
-                onDismiss={() => setFileState(null)}
-              />
-            )}
-
-            {/* Error */}
-            {error && !thinking && (
-              <div className="rounded-xl bg-amber-500/20 px-3.5 py-3 text-[13px] text-amber-200">
-                {error}
-              </div>
-            )}
-
-            {/* Thinking */}
-            {thinking && (
-              <div className="flex items-center gap-2 text-[13px] text-white/60">
-                <span className="inline-flex gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "0ms" }} />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "150ms" }} />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "300ms" }} />
-                </span>
-                Analyzing your data...
-              </div>
-            )}
-
-            {/* Chat response */}
-            {response && !thinking && (
-              <div className="rounded-xl bg-white/5 px-3.5 py-3 text-[13px] leading-relaxed text-white/80">
-                {response.split("\n").map((line, i) => (
-                  <p key={i} className={i > 0 ? "mt-1" : ""}>
-                    {line}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            {/* Suggestion chips */}
-            {!response && !thinking && !error && !fileState && (
-              <div className="flex flex-wrap gap-2">
-                {getChipsForPath(pathname).map((chip) => (
-                  <SuggestionChip key={chip.text} text={chip.text} onClick={() => handleQuery(chip.query)} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Input bar (bottom) */}
-          <div className="border-t border-white/10 px-5 py-3">
-            <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
-          </div>
-        </div>
-      </div>
+      <button
+        onClick={() => setIsMinimized(false)}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--glass-dark)] shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/30"
+        aria-label="Open AI Assistant"
+      >
+        <AiAvatar size="sm" showRing showGlow />
+      </button>
     );
   }
 
-  // ─── Collapsed (bottom bar) view ────────────────────────────
+  // ─── Open: floating panel (not full-screen) ─────────────────
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-[540px] -translate-x-1/2">
-      <div className="glass-dark rounded-3xl px-5 pb-4 pt-5">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <AiAvatar size="sm" showRing showGlow />
-            <h3 className="text-[15px] font-semibold text-white">AI Assistant</h3>
-          </div>
-          <div className="flex items-center gap-1">
-            {(response || error || fileState) && (
-              <button
-                onClick={() => {
-                  setResponse(null);
-                  setError(null);
-                  if (fileState?.status === "done" || fileState?.status === "error") {
-                    setFileState(null);
-                  }
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition-colors hover:text-white/80"
-              >
-                <X className="h-4 w-4" strokeWidth={1.8} />
-              </button>
-            )}
-            <button
-              onClick={() => setExpanded(true)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition-colors hover:text-white/80"
-            >
-              <Maximize2 className="h-4 w-4" strokeWidth={1.8} />
-            </button>
-          </div>
+    <div className="fixed bottom-6 right-6 z-50 flex h-[520px] max-h-[85vh] w-[400px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--glass-dark)] shadow-2xl backdrop-blur-xl">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <AiAvatar size="sm" showRing showGlow />
+          <h3 className="text-[15px] font-semibold text-white">AI Assistant</h3>
         </div>
+        <div className="flex items-center gap-1">
+          {(response || error || fileState) && (
+            <button
+              onClick={() => {
+                setResponse(null);
+                setError(null);
+                if (fileState?.status === "done" || fileState?.status === "error") {
+                  setFileState(null);
+                }
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white/80"
+              aria-label="Clear"
+            >
+              <X className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          )}
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white/80"
+            aria-label="Minimize"
+          >
+            <Minimize2 className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
 
-        {/* File upload progress (collapsed) */}
+      {/* Content (scrollable) */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
+        {/* Drop zone */}
+        <ExpandedDropZone onFilesSelected={handleExpandedFiles} />
+
+        {/* Upload progress / result */}
         {fileState && (
           <UploadProgress
             fileState={fileState}
             onDismiss={() => setFileState(null)}
-            compact
           />
         )}
 
         {/* Error */}
-        {!fileState && error && !thinking && (
+        {error && !thinking && (
           <div className="mt-3 rounded-xl bg-amber-500/20 px-3.5 py-3 text-[13px] text-amber-200">
             {error}
           </div>
         )}
 
-        {/* AI Response area */}
-        {!fileState && thinking && (
+        {/* Thinking */}
+        {thinking && (
           <div className="mt-3 flex items-center gap-2 text-[13px] text-white/60">
             <span className="inline-flex gap-1">
-              <span
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50"
-                style={{ animationDelay: "0ms" }}
-              />
-              <span
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50"
-                style={{ animationDelay: "150ms" }}
-              />
-              <span
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50"
-                style={{ animationDelay: "300ms" }}
-              />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "0ms" }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "150ms" }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/50" style={{ animationDelay: "300ms" }} />
             </span>
             Analyzing your data...
           </div>
         )}
 
-        {!fileState && response && !thinking && (
-          <div className="mt-3 max-h-[120px] overflow-y-auto rounded-xl bg-white/5 px-3.5 py-3 text-[13px] leading-relaxed text-white/80">
+        {/* Chat response */}
+        {response && !thinking && (
+          <div className="mt-3 rounded-xl bg-white/5 px-3.5 py-3 text-[13px] leading-relaxed text-white/80">
             {response.split("\n").map((line, i) => (
               <p key={i} className={i > 0 ? "mt-1" : ""}>
                 {line}
@@ -577,19 +501,19 @@ export function AssistantPanel() {
           </div>
         )}
 
-        {/* Context-aware suggestion chips */}
-        {!fileState && !response && !thinking && !error && (
+        {/* Suggestion chips */}
+        {!response && !thinking && !error && !fileState && (
           <div className="mt-3 flex flex-wrap gap-2">
             {getChipsForPath(pathname).map((chip) => (
               <SuggestionChip key={chip.text} text={chip.text} onClick={() => handleQuery(chip.query)} />
             ))}
           </div>
         )}
+      </div>
 
-        {/* Input bar */}
-        <div className="mt-3">
-          <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
-        </div>
+      {/* Input bar (bottom) */}
+      <div className="shrink-0 border-t border-white/10 px-4 py-3">
+        <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
       </div>
     </div>
   );

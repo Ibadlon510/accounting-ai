@@ -31,7 +31,15 @@ export default function SignupPage() {
       body: JSON.stringify({ email, password, fullName }),
     });
 
-    const data = await res.json();
+    let data: { error?: string; ok?: boolean; userId?: string } = {};
+    const text = await res.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Non-JSON response (e.g. error page)
+      }
+    }
     if (!res.ok) {
       setError(data.error ?? "Failed to create account");
       setLoading(false);
