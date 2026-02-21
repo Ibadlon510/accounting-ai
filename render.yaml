@@ -1,5 +1,10 @@
-# Render Blueprint — optional: use "New > Blueprint" and point at this repo to create the service from this file.
-# Or create a Web Service manually and use the same settings below.
+# Render Blueprint — use "New > Blueprint" and point at this repo.
+databases:
+  - name: accounting-ai-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: 16
+
 services:
   - type: web
     name: accounting-ai
@@ -7,11 +12,21 @@ services:
     region: oregon
     plan: free
 
-    buildCommand: npm install && npm run build && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
+    buildCommand: npm install && npm run build && npx drizzle-kit migrate && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
     startCommand: node .next/standalone/server.js
 
     envVars:
       - key: NODE_VERSION
         value: "20"
-      # Add the rest in Render Dashboard: Supabase, DATABASE_URL, AI keys, AWS (Secret Files or Environment)
-      # NEXT_PUBLIC_* must be set in Render for client-side; others can be secret.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: accounting-ai-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      # AUTH_URL must be set manually in Dashboard after first deploy:
+      # e.g. https://accounting-ai.onrender.com
+      - key: AUTH_URL
+        value: "https://accounting-ai.onrender.com"
+      # Also set in Render Dashboard: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+      # GOOGLE_GEMINI_API_KEY, OPENAI_API_KEY, RESEND_API_KEY, AWS_* keys

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -16,14 +16,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleGoogleSignup() {
-    const supabase = createClient();
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    await signIn("google", { callbackUrl: "/onboarding" });
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -31,39 +24,35 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    if (!supabase) {
-      setError("Supabase is not configured. Use Quick Login on the login page for demo mode.");
-      setLoading(false);
-      return;
-    }
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+    // Register the user via API
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, fullName }),
     });
 
-    if (error) {
-      setError(error.message);
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Failed to create account");
       setLoading(false);
       return;
     }
 
-    // If session exists, email confirmation is disabled — go straight in
-    if (data.session) {
-      router.push("/onboarding");
-      router.refresh();
+    // Auto-login after registration
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("Account created but login failed. Please sign in manually.");
+      setLoading(false);
       return;
     }
 
-    // Email confirmation required — redirect to OTP verification page
-    router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-    return;
+    router.push("/onboarding");
+    router.refresh();
   }
 
   return (

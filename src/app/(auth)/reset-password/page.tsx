@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lock, CheckCircle2 } from "lucide-react";
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="text-center text-[14px] text-text-secondary">Loading...</div>}>
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") ?? "";
+  const email = searchParams.get("email") ?? "";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -27,27 +37,29 @@ export default function ResetPasswordPage() {
       setError("Passwords do not match");
       return;
     }
-
-    setLoading(true);
-
-    const supabase = createClient();
-    if (!supabase) {
-      setError("Authentication is not configured");
-      setLoading(false);
+    if (!token || !email) {
+      setError("Invalid reset link. Please request a new one.");
       return;
     }
 
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setLoading(true);
 
-    if (updateError) {
-      setError(updateError.message);
+    const res = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, token, password }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Failed to reset password");
       setLoading(false);
       return;
     }
 
     setDone(true);
     setTimeout(() => {
-      router.push("/dashboard");
+      router.push("/login");
       router.refresh();
     }, 2000);
   }

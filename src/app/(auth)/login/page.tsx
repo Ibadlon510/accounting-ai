@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles } from "lucide-react";
@@ -16,14 +16,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleGoogleLogin() {
-    const supabase = createClient();
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    await signIn("google", { callbackUrl: "/dashboard" });
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -31,25 +24,14 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    if (!supabase) {
-      setError("Supabase is not configured. Use Quick Login for demo mode.");
-      setLoading(false);
-      return;
-    }
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const result = await signIn("credentials", {
       email,
       password,
+      redirect: false,
     });
 
-    if (signInError) {
-      const msg = signInError.message.toLowerCase();
-      if (msg.includes("email not confirmed") || msg.includes("confirm your email")) {
-        router.push(`/verify-email?email=${encodeURIComponent(email)}&from=login`);
-        setLoading(false);
-        return;
-      }
-      setError(signInError.message);
+    if (result?.error) {
+      setError("Invalid email or password");
       setLoading(false);
       return;
     }
@@ -92,19 +74,6 @@ export default function LoginPage() {
           AI-Powered Smart Accounting for Businesses
         </p>
       </div>
-
-      {/* Quick Login */}
-      <Button
-        type="button"
-        onClick={() => router.push("/dashboard")}
-        className="mt-6 h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 text-[15px] font-semibold text-white hover:opacity-90"
-      >
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth={2}><path d="M13 5l7 7-7 7M5 12h14" /></svg>
-        Quick Login — Demo Mode
-      </Button>
-      <p className="mt-2 text-center text-[11px] text-text-meta">
-        Skip authentication and explore with sample business data
-      </p>
 
       <Button
         type="button"

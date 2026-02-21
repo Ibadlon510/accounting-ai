@@ -11,6 +11,7 @@ import {
   date,
   check,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -42,9 +43,11 @@ export const organizations = pgTable("organizations", {
 // ─── Users ───────────────────────────────────────────────────
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  authId: uuid("auth_id").notNull().unique(), // Supabase auth.users.id
-  email: varchar("email", { length: 255 }).notNull(),
-  fullName: varchar("full_name", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(), // NextAuth required field
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  emailVerified: timestamp("email_verified", { withTimezone: true }),
+  hashedPassword: text("hashed_password"), // null for OAuth-only users
+  image: text("image"),
   roleTitle: varchar("role_title", { length: 100 }),
   avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -54,6 +57,19 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
 });
+
+// ─── Verification Tokens (password reset) ───────────────────
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: varchar("identifier", { length: 255 }).notNull(),
+    token: varchar("token", { length: 255 }).notNull(),
+    expires: timestamp("expires", { withTimezone: true }).notNull(),
+  },
+  (vt) => [
+    primaryKey({ columns: [vt.identifier, vt.token] }),
+  ]
+);
 
 // ─── User Roles (per organization) ──────────────────────────
 export const userRoles = pgTable("user_roles", {

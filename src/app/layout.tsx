@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -32,10 +33,12 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/assets/icon-192.png" />
       </head>
       <body className={`${plusJakarta.variable} font-sans antialiased`}>
-        <TooltipProvider>
-          {children}
-          <Toaster position="bottom-right" richColors />
-        </TooltipProvider>
+        <AuthSessionProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster position="bottom-right" richColors />
+          </TooltipProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

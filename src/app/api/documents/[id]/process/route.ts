@@ -5,8 +5,8 @@ import { documents, organizations } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getObjectBytes, isVaultConfigured } from "@/lib/storage/vault";
 import { extractInvoiceFromImage } from "@/lib/ai/extract-invoice";
-import { auditLogs, users } from "@/lib/db/schema";
-import { createClient } from "@/lib/supabase/server";
+import { auditLogs } from "@/lib/db/schema";
+import { auth } from "@/lib/auth";
 
 export async function POST(
   _request: Request,
@@ -92,15 +92,8 @@ export async function POST(
     .set({ tokenBalance: Math.max(0, Number(org.tokenBalance ?? 0) - 1) })
     .where(eq(organizations.id, orgId));
 
-  let userId: string | undefined;
-  const supabase = await createClient();
-  if (supabase) {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const [appUser] = await db.select({ id: users.id }).from(users).where(eq(users.authId, authUser.id)).limit(1);
-      userId = appUser?.id;
-    }
-  }
+  const session = await auth();
+  const userId = session?.user?.id;
   await db.insert(auditLogs).values({
     organizationId: orgId,
     userId,

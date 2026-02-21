@@ -16,6 +16,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
+# Run database migrations (DATABASE_URL must be set as a build arg or at runtime)
+# Note: On Render, migrations run via render.yaml buildCommand instead.
+COPY drizzle ./drizzle
+RUN if [ -n "$DATABASE_URL" ]; then npx drizzle-kit migrate; fi
+
 # --- Stage 3: Production runner ---
 FROM node:20-alpine AS runner
 WORKDIR /app

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { organizations, auditLogs, users } from "@/lib/db/schema";
+import { organizations, auditLogs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@/lib/supabase/server";
 
 const ASSISTANT_TOKEN_COST = 1; // 1 token per assistant query
 const MIN_BALANCE = ASSISTANT_TOKEN_COST;
@@ -102,21 +102,8 @@ export async function POST(request: Request) {
       })
       .where(eq(organizations.id, orgId));
 
-    let userId: string | undefined;
-    const supabase = await createClient();
-    if (supabase) {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      if (authUser) {
-        const [appUser] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.authId, authUser.id))
-          .limit(1);
-        userId = appUser?.id;
-      }
-    }
+    const session = await auth();
+    const userId = session?.user?.id;
     await db.insert(auditLogs).values({
       organizationId: orgId,
       userId,

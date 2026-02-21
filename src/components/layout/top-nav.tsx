@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Home,
@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "next-auth/react";
 import { TokenMeter } from "@/components/ui/token-meter";
 
 const navItems = [
@@ -50,15 +50,9 @@ const navItems = [
 
 export function TopNav() {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function handleSignOut() {
-    const supabase = createClient();
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
-    router.push("/login");
-    router.refresh();
+    await signOut({ callbackUrl: "/login" });
   }
 
   function isActive(href: string) {

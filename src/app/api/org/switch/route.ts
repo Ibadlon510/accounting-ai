@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { userRoles, users } from "@/lib/db/schema";
+import { userRoles } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { CURRENT_ORG_COOKIE, COOKIE_MAX_AGE } from "@/lib/org/constants";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  if (!supabase) {
-    return NextResponse.json({ error: "Auth not configured" }, { status: 500 });
-  }
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) {
+  const session = await auth();
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -31,15 +24,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "organizationId required" }, { status: 400 });
   }
 
-  const [appUser] = await db.select().from(users).where(eq(users.authId, authUser.id)).limit(1);
-  if (!appUser) {
-    return NextResponse.json({ error: "User record not found" }, { status: 403 });
-  }
-
   const [role] = await db
     .select()
     .from(userRoles)
-    .where(and(eq(userRoles.userId, appUser.id), eq(userRoles.organizationId, organizationId)))
+    .where(and(eq(userRoles.userId, session.user.id), eq(userRoles.organizationId, organizationId)))
     .limit(1);
   if (!role) {
     return NextResponse.json({ error: "Access denied to this organization" }, { status: 403 });

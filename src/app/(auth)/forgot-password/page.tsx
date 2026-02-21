@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Mail } from "lucide-react";
@@ -18,19 +17,15 @@ export default function ForgotPasswordPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    if (!supabase) {
-      setError("Authentication is not configured");
-      setLoading(false);
-      return;
-    }
-
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     });
 
-    if (resetError) {
-      setError(resetError.message);
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Something went wrong");
       setLoading(false);
       return;
     }

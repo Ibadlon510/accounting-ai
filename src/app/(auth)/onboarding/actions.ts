@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { organizations, userRoles, users } from "@/lib/db/schema";
 import { CURRENT_ORG_COOKIE, COOKIE_MAX_AGE } from "@/lib/org/constants";
@@ -16,16 +16,8 @@ export async function createOrganizationAndLaunch(formData: {
   fiscalYearStart: number;
   trn?: string;
 }): Promise<OnboardingResult> {
-  const supabase = await createClient();
-  if (!supabase) {
-    return { ok: false, error: "Auth not configured" };
-  }
-
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !authUser) {
+  const session = await auth();
+  if (!session?.user?.id) {
     return { ok: false, error: "Not authenticated" };
   }
 
@@ -35,29 +27,15 @@ export async function createOrganizationAndLaunch(formData: {
   }
 
   try {
-    // Ensure app user exists (link Supabase auth to our users table)
+    // Verify user exists in our DB
     const [existingUser] = await db
       .select()
       .from(users)
-      .where(eq(users.authId, authUser.id))
+      .where(eq(users.id, session.user.id))
       .limit(1);
 
-    let appUserId: string;
-    if (existingUser) {
-      appUserId = existingUser.id;
-    } else {
-      const [inserted] = await db
-        .insert(users)
-        .values({
-          authId: authUser.id,
-          email: authUser.email ?? "",
-          fullName: authUser.user_metadata?.full_name ?? authUser.email ?? "User",
-        })
-        .returning({ id: users.id });
-      if (!inserted?.id) {
-        return { ok: false, error: "Failed to create user record" };
-      }
-      appUserId = inserted.id;
+    if (!existingUser) {
+      return { ok: false, error: "User record not found" };
     }
 
     // Create organization with token/plan fields
@@ -78,7 +56,7 @@ export async function createOrganizationAndLaunch(formData: {
 
     // Link user to org as owner
     await db.insert(userRoles).values({
-      userId: appUserId,
+      userId: session.user.id,
       organizationId: org.id,
       role: "owner",
     });

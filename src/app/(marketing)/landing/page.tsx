@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -14,7 +13,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { useSession } from "next-auth/react";
 
 const features = [
   { icon: Sparkles, title: "AI-Powered Automation", description: "Smart transaction classification, natural language entry, and automated bookkeeping that learns your patterns." },
@@ -37,15 +36,8 @@ const benefits = [
 ];
 
 export default function LandingPage() {
-  const [isSignedIn, setIsSignedIn] = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsSignedIn(!!session);
-    });
-  }, []);
+  const { data: session } = useSession();
+  const isSignedIn = !!session;
 
   return (
     <div className="min-h-screen">

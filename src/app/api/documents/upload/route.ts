@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { documents, auditLogs, users, organizations } from "@/lib/db/schema";
+import { documents, auditLogs, organizations } from "@/lib/db/schema";
 import { uploadToTemp, isVaultConfigured } from "@/lib/storage/vault";
-import { createClient } from "@/lib/supabase/server";
 import { eq } from "drizzle-orm";
 
 const ALLOWED_TYPES = [
@@ -89,15 +89,8 @@ export async function POST(request: Request) {
 
   await db.update(documents).set({ s3Key }).where(eq(documents.id, doc.id));
 
-  let userId: string | undefined;
-  const supabase = await createClient();
-  if (supabase) {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const [appUser] = await db.select({ id: users.id }).from(users).where(eq(users.authId, authUser.id)).limit(1);
-      userId = appUser?.id;
-    }
-  }
+  const session = await auth();
+  const userId = session?.user?.id;
 
   await db.insert(auditLogs).values({
     organizationId: orgId,

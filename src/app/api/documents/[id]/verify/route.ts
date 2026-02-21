@@ -13,8 +13,8 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, lte, gte, sql, count } from "drizzle-orm";
 import { moveToRetentionVault, isVaultConfigured } from "@/lib/storage/vault";
-import { auditLogs, users } from "@/lib/db/schema";
-import { createClient } from "@/lib/supabase/server";
+import { auditLogs } from "@/lib/db/schema";
+import { auth } from "@/lib/auth";
 
 export async function PATCH(
   request: Request,
@@ -243,15 +243,8 @@ export async function PATCH(
       set: { glAccountId, lastUsed: new Date(), confidence: "1" },
     });
 
-  let userId: string | undefined;
-  const supabase = await createClient();
-  if (supabase) {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const [appUser] = await db.select({ id: users.id }).from(users).where(eq(users.authId, authUser.id)).limit(1);
-      userId = appUser?.id;
-    }
-  }
+  const session = await auth();
+  const userId = session?.user?.id;
 
   await db.insert(auditLogs).values({
     organizationId: orgId,

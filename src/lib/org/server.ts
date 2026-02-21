@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { organizations, userRoles, users } from "@/lib/db/schema";
+import { organizations, userRoles } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { CURRENT_ORG_COOKIE } from "./constants";
 
@@ -10,25 +10,17 @@ import { CURRENT_ORG_COOKIE } from "./constants";
  * Returns null if not authenticated or no org selected / no access.
  */
 export async function getCurrentOrganizationId(): Promise<string | null> {
-  const supabase = await createClient();
-  if (!supabase) return null;
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  const session = await auth();
+  if (!session?.user?.id) return null;
 
   const cookieStore = await cookies();
   const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
   if (!orgId) return null;
 
-  const [appUser] = await db.select().from(users).where(eq(users.authId, authUser.id)).limit(1);
-  if (!appUser) return null;
-
   const [role] = await db
     .select()
     .from(userRoles)
-    .where(and(eq(userRoles.userId, appUser.id), eq(userRoles.organizationId, orgId)))
+    .where(and(eq(userRoles.userId, session.user.id), eq(userRoles.organizationId, orgId)))
     .limit(1);
   if (!role) return null;
 

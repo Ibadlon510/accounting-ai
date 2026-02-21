@@ -9,13 +9,20 @@ function getDb() {
   if (!_db) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
-      throw new Error("DATABASE_URL is not set");
+      throw new Error("DATABASE_URL is not set. Add it to .env.local.");
     }
-    const client = postgres(connectionString, { max: 10, ssl: "require", prepare: false });
+    // Render internal URLs don't need SSL; external connections do.
+    const isInternal = connectionString.includes("@dpg-") || connectionString.includes(".render.com:5432");
+    const client = postgres(connectionString, {
+      max: 10,
+      ...(isInternal ? {} : { ssl: "require" }),
+    });
     _db = drizzle(client, { schema });
   }
   return _db;
 }
+
+export { getDb };
 
 export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
   get(_target, prop, receiver) {
