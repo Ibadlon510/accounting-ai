@@ -27,6 +27,8 @@ In the Render Dashboard, add these to the **web service**:
 | `GOOGLE_GEMINI_API_KEY` | For AI assistant | Google AI Studio |
 | `OPENAI_API_KEY` | For AI features | OpenAI dashboard |
 | `RESEND_API_KEY` | For emails | resend.com |
+| `EMAIL_FROM` | For emails | e.g. `Agar <onboarding@resend.dev>` |
+| `NEXT_PUBLIC_SITE_URL` | For email links | Your app URL |
 | `AWS_ACCESS_KEY_ID` | For document vault | AWS IAM |
 | `AWS_SECRET_ACCESS_KEY` | For document vault | AWS IAM |
 | `AWS_REGION` | For document vault | e.g. `me-central-1` |
