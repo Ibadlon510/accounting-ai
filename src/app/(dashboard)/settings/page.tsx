@@ -12,12 +12,15 @@ import {
   Shield,
   Bell,
   Palette,
+  Database,
+  AlertTriangle,
 } from "lucide-react";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { StyledSelect } from "@/components/ui/styled-select";
 
 const tabs = [
   { id: "organization", label: "Organization", icon: Building2 },
+  { id: "database", label: "Database", icon: Database },
   { id: "billing", label: "Billing", icon: CreditCard },
   { id: "team", label: "Team", icon: Users },
   { id: "security", label: "Security", icon: Shield },
@@ -71,8 +74,9 @@ export default function SettingsPage() {
         {/* Content */}
         <div className="col-span-9">
           {activeTab === "organization" && <OrganizationSettings />}
+          {activeTab === "database" && <DatabaseSettings />}
           {activeTab === "appearance" && <AppearanceSettings />}
-          {activeTab !== "organization" && activeTab !== "appearance" && (
+          {activeTab !== "organization" && activeTab !== "database" && activeTab !== "appearance" && (
             <div className="dashboard-card">
               <h2 className="text-[18px] font-semibold text-text-primary">
                 {tabs.find((t) => t.id === activeTab)?.label}
@@ -222,6 +226,134 @@ function OrganizationSettings() {
           >
             {saving ? "Saving..." : "Save Changes"}
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DatabaseSettings() {
+  const [seeding, setSeeding] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmSeed, setConfirmSeed] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  async function handleSeed() {
+    setConfirmSeed(false);
+    setSeeding(true);
+    try {
+      const res = await fetch("/api/org/demo-data", { method: "POST" });
+      if (res.ok) {
+        showSuccess("Demo data loaded", "Sample customers, invoices, journal entries, and more have been added.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError("Failed to load demo data", data.error ?? "Please try again.");
+      }
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  async function handleRemove() {
+    setConfirmRemove(false);
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/org/demo-data", { method: "DELETE" });
+      if (res.ok) {
+        showSuccess("Data removed", "All transactional and master data has been deleted.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError("Failed to remove data", data.error ?? "Please try again.");
+      }
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Load Demo Data */}
+      <div className="dashboard-card">
+        <h2 className="text-[18px] font-semibold text-text-primary">Load Demo Data</h2>
+        <p className="mt-1 text-[13px] text-text-secondary">
+          Populate your organization with sample 2025 data including customers, suppliers,
+          invoices, bills, journal entries, bank transactions, and VAT returns.
+        </p>
+        <div className="mt-5">
+          {!confirmSeed ? (
+            <Button
+              onClick={() => setConfirmSeed(true)}
+              disabled={seeding || removing}
+              className="h-10 rounded-xl bg-text-primary px-6 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+            >
+              {seeding ? "Loading..." : "Load Demo Data"}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface/50 px-4 py-3">
+              <p className="flex-1 text-[13px] text-text-secondary">
+                This will add sample data to your organization. Existing data will not be overwritten.
+              </p>
+              <Button
+                onClick={handleSeed}
+                disabled={seeding}
+                className="h-9 rounded-xl bg-text-primary px-5 text-[12px] font-semibold text-white hover:bg-text-primary/90"
+              >
+                {seeding ? "Loading..." : "Confirm"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmSeed(false)}
+                className="h-9 rounded-xl text-[12px] font-medium text-text-secondary"
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Remove All Data */}
+      <div className="dashboard-card border border-error/20">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-error" strokeWidth={1.8} />
+          <div>
+            <h2 className="text-[18px] font-semibold text-text-primary">Remove All Data</h2>
+            <p className="mt-1 text-[13px] text-text-secondary">
+              Delete all transactional and master data (customers, invoices, journal entries, etc.).
+              Your organization profile and user accounts will be preserved.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5">
+          {!confirmRemove ? (
+            <Button
+              onClick={() => setConfirmRemove(true)}
+              disabled={seeding || removing}
+              className="h-10 rounded-xl bg-error px-6 text-[13px] font-semibold text-white hover:bg-error/90"
+            >
+              {removing ? "Removing..." : "Remove All Data"}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-3 rounded-xl border border-error/30 bg-error/5 px-4 py-3">
+              <p className="flex-1 text-[13px] font-medium text-error">
+                This action is irreversible. All data will be permanently deleted.
+              </p>
+              <Button
+                onClick={handleRemove}
+                disabled={removing}
+                className="h-9 rounded-xl bg-error px-5 text-[12px] font-semibold text-white hover:bg-error/90"
+              >
+                {removing ? "Removing..." : "Delete Everything"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmRemove(false)}
+                className="h-9 rounded-xl text-[12px] font-medium text-text-secondary"
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

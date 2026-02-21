@@ -162,17 +162,11 @@ async function seedFiscalYearAndPeriods(organizationId: string): Promise<{
   return { fiscalYearId: fy.id, periodIdsByMonth };
 }
 
-async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("Set DATABASE_URL to run the seed.");
-    process.exit(1);
-  }
-
-  console.log("Seeding database with full 2025 data...");
-
-  const organizationId = await getOrCreateOrg();
-  console.log("Organization ID:", organizationId);
-
+/**
+ * Seed full 2025 demo data for a given organization.
+ * Can be called from API routes or CLI.
+ */
+export async function seedDemoData(organizationId: string): Promise<void> {
   await ensureAccountTypes();
   await seedChartOfAccounts(organizationId);
   const accountByCode = await getAccountMap(organizationId);
@@ -614,7 +608,49 @@ async function main() {
   console.log("Seed completed. Organization ID:", organizationId);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+/**
+ * Remove all demo / transactional data for an organization.
+ * Deletes in FK-safe order. Does NOT delete the org itself or user roles.
+ */
+export async function removeDemoData(organizationId: string): Promise<void> {
+  // Delete in reverse-dependency order
+  await db.delete(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId));
+  await db.delete(vatReturns).where(eq(vatReturns.organizationId, organizationId));
+  await db.delete(journalLines).where(eq(journalLines.organizationId, organizationId));
+  await db.delete(journalEntries).where(eq(journalEntries.organizationId, organizationId));
+  // payment allocations cascade from payments
+  await db.delete(payments).where(eq(payments.organizationId, organizationId));
+  // invoice lines cascade from invoices
+  await db.delete(invoices).where(eq(invoices.organizationId, organizationId));
+  // bill lines cascade from bills
+  await db.delete(bills).where(eq(bills.organizationId, organizationId));
+  await db.delete(bankTransactions).where(eq(bankTransactions.organizationId, organizationId));
+  await db.delete(bankAccounts).where(eq(bankAccounts.organizationId, organizationId));
+  await db.delete(items).where(eq(items.organizationId, organizationId));
+  await db.delete(customers).where(eq(customers.organizationId, organizationId));
+  await db.delete(suppliers).where(eq(suppliers.organizationId, organizationId));
+  await db.delete(taxCodes).where(eq(taxCodes.organizationId, organizationId));
+  await db.delete(accountingPeriods).where(eq(accountingPeriods.organizationId, organizationId));
+  await db.delete(fiscalYears).where(eq(fiscalYears.organizationId, organizationId));
+  await db.delete(chartOfAccounts).where(eq(chartOfAccounts.organizationId, organizationId));
+  console.log("Removed all demo data for org:", organizationId);
+}
+
+async function main() {
+  if (!process.env.DATABASE_URL) {
+    console.error("Set DATABASE_URL to run the seed.");
+    process.exit(1);
+  }
+  console.log("Seeding database with full 2025 data...");
+  const organizationId = await getOrCreateOrg();
+  console.log("Organization ID:", organizationId);
+  await seedDemoData(organizationId);
+}
+
+// Only run main() when executed directly as a script
+if (typeof process !== "undefined" && process.argv[1]?.includes("seed")) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

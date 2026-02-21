@@ -61,7 +61,7 @@ export async function createOrganizationAndLaunch(formData: {
       role: "owner",
     });
 
-    // Seed UAE Chart of Accounts for the new org
+    // Seed UAE Chart of Accounts (structural data needed for GL mapping)
     await seedChartOfAccounts(org.id);
 
     // Set current org cookie
