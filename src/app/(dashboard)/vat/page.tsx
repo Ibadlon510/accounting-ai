@@ -29,7 +29,7 @@ export default function VATPage() {
   const [dbSummary, setDbSummary] = useState(emptySummary);
 
   useEffect(() => {
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data?.vat) setDbSummary(data.vat); })
       .catch(() => {});

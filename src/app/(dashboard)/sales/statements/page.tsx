@@ -4,29 +4,16 @@ import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { ViewStatementPanel, type Statement } from "@/components/overlays/view-statement-panel";
 
-type Inv = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; total: number; amountPaid: number; amountDue: number };
-type Cust = { id: string; name: string; city: string; country: string; isActive: boolean };
-
 export default function CustomerStatementsPage() {
   const [viewingCustomerId, setViewingCustomerId] = useState<string | null>(null);
-  const [customers, setCustomers] = useState<Cust[]>([]);
-  const [invoicesList, setInvoicesList] = useState<Inv[]>([]);
+  const [statements, setStatements] = useState<Statement[]>([]);
 
   useEffect(() => {
-    fetch("/api/sales/customers").then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
-    fetch("/api/sales/invoices").then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoicesList(d.invoices ?? [])).catch(() => {});
+    fetch("/api/sales/statements", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { statements: [] }))
+      .then((d) => setStatements(d.statements ?? []))
+      .catch(() => {});
   }, []);
-
-  const statements: Statement[] = customers
-    .filter((c) => c.isActive)
-    .map((customer) => {
-      const invoices = invoicesList.filter((inv) => inv.customerId === customer.id);
-      const totalInvoiced = invoices.reduce((s, inv) => s + inv.total, 0);
-      const totalPaid = invoices.reduce((s, inv) => s + inv.amountPaid, 0);
-      const balance = invoices.reduce((s, inv) => s + inv.amountDue, 0);
-      return { customer, invoices, payments: [] as Statement["payments"], totalInvoiced, totalPaid, balance };
-    })
-    .filter((s) => s.invoices.length > 0);
 
   const selectedStatement = statements.find((s) => s.customer.id === viewingCustomerId) ?? null;
 
@@ -42,7 +29,7 @@ export default function CustomerStatementsPage() {
       </p>
 
       <div className="space-y-4">
-        {statements.map(({ customer, invoices, totalInvoiced, totalPaid, balance }) => (
+        {statements.map(({ customer, invoices, creditNotes, totalInvoiced, totalPaid, balance }) => (
           <button
             key={customer.id}
             onClick={() => setViewingCustomerId(customer.id)}
@@ -57,7 +44,11 @@ export default function CustomerStatementsPage() {
                 </div>
                 <div>
                   <h3 className="text-[15px] font-semibold text-text-primary">{customer.name}</h3>
-                  <p className="text-[12px] text-text-meta">{invoices.length} invoice{invoices.length !== 1 ? "s" : ""} • {customer.city}, {customer.country}</p>
+                  <p className="text-[12px] text-text-meta">
+                    {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
+                    {(creditNotes?.length ?? 0) > 0 && ` • ${creditNotes!.length} credit note${creditNotes!.length !== 1 ? "s" : ""}`}
+                    {` • ${customer.city}, ${customer.country}`}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-8">

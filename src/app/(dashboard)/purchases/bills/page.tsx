@@ -7,10 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateBillPanel } from "@/components/modals/create-bill-panel";
 import { ViewBillPanel } from "@/components/overlays/view-bill-panel";
+import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
+import { RecordBillPaymentPanel } from "@/components/modals/record-bill-payment-panel";
 
 type BillLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; lines: BillLine[] };
+type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
+type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: BillLine[] };
 type Supplier = { id: string; name: string; email: string; phone: string; isActive: boolean };
+type BankAccount = { id: string; accountName: string; currency: string };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -27,21 +31,44 @@ export default function BillsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [bills, setBills] = useState<Bill[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentBillId, setPaymentBillId] = useState<string | null>(null);
+  const [viewingPaymentId, setViewingPaymentId] = useState<string | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+
+  function loadBills() {
+    fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
+  }
 
   useEffect(() => {
-    fetch("/api/purchases/bills").then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
-    fetch("/api/purchases/suppliers").then((r) => r.ok ? r.json() : { suppliers: [] }).then((d) => setSuppliers(d.suppliers ?? [])).catch(() => {});
+    loadBills();
+    fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { suppliers: [] }).then((d) => setSuppliers(d.suppliers ?? [])).catch(() => {});
+    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch(() => {});
   }, []);
 
-  function handleCreate(data: { supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; lines: BillLine[]; subtotal: number; taxAmount: number; total: number }) {
-    const newBill: Bill = {
-      id: `bill-${Date.now()}`,
-      ...data,
-      status: "received",
-      amountPaid: 0,
-      amountDue: data.total,
-    };
-    setBills((prev) => [newBill, ...prev]);
+  async function handleCreate(data: { supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; lines: BillLine[]; subtotal: number; taxAmount: number; total: number }) {
+    const res = await fetch("/api/purchases/bills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        supplierId: data.supplierId,
+        billNumber: data.billNumber,
+        issueDate: data.issueDate,
+        dueDate: data.dueDate,
+        lines: data.lines.map((l) => ({ productId: l.productId, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, taxRate: l.taxRate, taxAmount: l.taxAmount })),
+        subtotal: data.subtotal,
+        taxAmount: data.taxAmount,
+        total: data.total,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to create bill");
+      throw new Error(json.error ?? "Failed to create bill");
+    }
+    const bill = json.bill as Bill;
+    setBills((prev) => [bill, ...prev]);
   }
 
   const filtered = bills.filter(
@@ -63,6 +90,51 @@ export default function BillsPage() {
           open={!!viewingId}
           onOpenChange={(o) => !o && setViewingId(null)}
           bill={bills.find((b) => b.id === viewingId) ?? null}
+          onViewPaymentReceipt={(id) => setViewingPaymentId(id)}
+          onRecordPayment={() => {
+            setPaymentBillId(viewingId);
+            setViewingId(null);
+            setPaymentOpen(true);
+          }}
+        />
+        <ViewPaymentPanel
+          open={!!viewingPaymentId}
+          onOpenChange={(o) => !o && setViewingPaymentId(null)}
+          paymentId={viewingPaymentId}
+          onViewBill={(id) => {
+            setViewingPaymentId(null);
+            setViewingId(id);
+          }}
+        />
+        <RecordBillPaymentPanel
+          open={paymentOpen}
+          onOpenChange={setPaymentOpen}
+          bankAccounts={bankAccounts}
+          bills={bills.filter((b) => b.amountDue > 0).map((b) => ({ id: b.id, supplierId: b.supplierId, billNumber: b.billNumber, supplierName: b.supplierName, amountDue: b.amountDue }))}
+          preSelectedBillId={paymentBillId}
+          onCreate={async (data) => {
+            const res = await fetch("/api/banking/payments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paymentType: "supplier_payment",
+                date: data.paymentDate,
+                bankAccountId: data.bankAccountId,
+                amount: data.amount,
+                supplierId: data.supplierId,
+                allocations: [{ billId: data.billId, amount: data.amount }],
+                reference: data.reference || undefined,
+              }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+              const { showError } = await import("@/lib/utils/toast-helpers");
+              showError(json.error ?? "Failed to record payment");
+              throw new Error(json.error);
+            }
+            loadBills();
+            setPaymentBillId(null);
+          }}
         />
       </div>
 

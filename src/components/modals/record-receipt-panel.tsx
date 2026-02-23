@@ -77,16 +77,16 @@ export function RecordReceiptPanel({ open, onOpenChange, onSuccess, initialValue
       reset();
     }
     Promise.all([
-      fetch("/api/banking").then((r) => (r.ok ? r.json() : { accounts: [] })),
-      fetch("/api/sales/customers").then((r) => (r.ok ? r.json() : { customers: [] })),
-      fetch("/api/purchases/suppliers").then((r) => (r.ok ? r.json() : { suppliers: [] })),
-      fetch("/api/sales/invoices").then((r) => (r.ok ? r.json() : { invoices: [] })),
-      fetch("/api/purchases/bills").then((r) => (r.ok ? r.json() : { bills: [] })),
+      fetch("/api/banking", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { accounts: [] })),
+      fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })),
+      fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { suppliers: [] })),
+      fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { invoices: [] })),
+      fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { bills: [] })),
     ]).then(([bank, cust, supp, inv, bil]) => {
       setBankAccounts(bank.accounts ?? []);
       setCustomers(cust.customers ?? []);
       setSuppliers(supp.suppliers ?? []);
-      const invs = (inv.invoices ?? []).filter((i: InvoiceOption) => i.amountDue > 0);
+      const invs = (inv.invoices ?? []).filter((i: InvoiceOption & { status?: string }) => i.amountDue > 0 && i.status !== "draft");
       setInvoices(invs.map((i: InvoiceOption) => ({ id: i.id, customerId: i.customerId, invoiceNumber: i.invoiceNumber, total: i.total, amountDue: i.amountDue })));
       const bils = (bil.bills ?? []).map((b: BillOption) => ({
         id: b.id, supplierId: b.supplierId, billNumber: b.billNumber, total: b.total,

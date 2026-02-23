@@ -1,44 +1,120 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecordPaymentPanel } from "@/components/modals/record-payment-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
+import { ViewInvoicePanel } from "@/components/overlays/view-invoice-panel";
 
-type Payment = { id: string; paymentNumber: string; paymentDate: string; entityName: string; amount: number; method: string; reference: string; invoiceNumber: string };
-type UnpaidInvoice = { id: string; invoiceNumber: string; customerName: string; amountDue: number };
+type Payment = { id: string; paymentNumber: string; paymentDate: string; entityName: string; amount: number; method: string; reference: string; invoiceNumber: string; invoiceId?: string | null };
+type UnpaidInvoice = { id: string; customerId: string; invoiceNumber: string; customerName: string; amountDue: number };
+type InvoiceLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
+type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
+type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
 
 export default function PaymentsReceivedPage() {
+  const searchParams = useSearchParams();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState<UnpaidInvoice[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; accountName: string; currency: string }[]>([]);
+
+  const paymentParam = searchParams.get("payment");
 
   useEffect(() => {
-    // No payments API yet - will show empty state
-    fetch("/api/sales/invoices")
+    fetch("/api/sales/invoices", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { invoices: [] })
       .then((d) => {
         const invs = d.invoices ?? [];
-        setUnpaidInvoices(invs.filter((inv: UnpaidInvoice & { amountDue: number }) => inv.amountDue > 0).map((inv: UnpaidInvoice & { customerName: string }) => ({ id: inv.id, invoiceNumber: inv.invoiceNumber, customerName: inv.customerName, amountDue: inv.amountDue })));
+        setInvoices(invs);
+        setUnpaidInvoices(
+          invs
+            .filter((inv: { amountDue: number; status?: string }) => inv.amountDue > 0 && inv.status !== "draft")
+            .map((inv: { id: string; customerId: string; invoiceNumber: string; customerName?: string; amountDue: number }) => ({
+              id: inv.id,
+              customerId: inv.customerId,
+              invoiceNumber: inv.invoiceNumber,
+              customerName: inv.customerName ?? "",
+              amountDue: inv.amountDue,
+            }))
+        );
       })
+      .catch(() => {});
+    fetch("/api/sales/payments", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { payments: [] })
+      .then((d) => setPayments(d.payments ?? []))
+      .catch(() => {});
+    fetch("/api/banking", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { accounts: [] })
+      .then((d) => setBankAccounts(d.accounts ?? []))
       .catch(() => {});
   }, []);
 
-  function handleCreate(data: { paymentDate: string; invoiceId: string; invoiceNumber: string; customerName: string; amount: number; method: string; reference: string }) {
-    const newPayment: Payment = {
-      id: `pay-${Date.now()}`,
-      paymentNumber: `PAY-${String(payments.length + 1).padStart(4, "0")}`,
-      paymentDate: data.paymentDate,
-      entityName: data.customerName,
-      amount: data.amount,
-      method: data.method,
-      reference: data.reference,
-      invoiceNumber: data.invoiceNumber,
-    };
-    setPayments((prev) => [newPayment, ...prev]);
+  useEffect(() => {
+    if (paymentParam && payments.length > 0) {
+      const exists = payments.some((p) => p.id === paymentParam);
+      if (exists) setViewingId(paymentParam);
+    }
+  }, [paymentParam, payments]);
+
+  async function loadData() {
+    const [invRes, payRes] = await Promise.all([
+      fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/sales/payments", { cache: "no-store" }).then((r) => r.json()),
+    ]);
+    const invs = invRes.invoices ?? [];
+    setInvoices(invs);
+    setUnpaidInvoices(
+      invs
+        .filter((inv: { amountDue: number; status?: string }) => inv.amountDue > 0 && inv.status !== "draft")
+        .map((inv: { id: string; customerId: string; invoiceNumber: string; customerName?: string; amountDue: number }) => ({
+          id: inv.id,
+          customerId: inv.customerId,
+          invoiceNumber: inv.invoiceNumber,
+          customerName: inv.customerName ?? "",
+          amountDue: inv.amountDue,
+        }))
+    );
+    setPayments(payRes.payments ?? []);
+  }
+
+  async function handleCreate(data: {
+    paymentDate: string;
+    bankAccountId: string;
+    customerId: string;
+    invoiceId: string;
+    invoiceNumber: string;
+    customerName: string;
+    amount: number;
+    method: string;
+    reference: string;
+  }) {
+    const res = await fetch("/api/banking/receipts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        receiptType: "customer_payment",
+        date: data.paymentDate,
+        bankAccountId: data.bankAccountId,
+        amount: data.amount,
+        customerId: data.customerId,
+        allocations: [{ invoiceId: data.invoiceId, amount: data.amount }],
+        reference: data.reference || undefined,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to record payment");
+      throw new Error(json.error ?? "Failed to record payment");
+    }
+    await loadData();
   }
 
   return (
@@ -47,11 +123,20 @@ export default function PaymentsReceivedPage() {
         <Button onClick={() => setPaymentOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> Record Payment
         </Button>
-        <RecordPaymentPanel open={paymentOpen} onOpenChange={setPaymentOpen} invoices={unpaidInvoices} onCreate={handleCreate} />
+        <RecordPaymentPanel open={paymentOpen} onOpenChange={setPaymentOpen} bankAccounts={bankAccounts} invoices={unpaidInvoices} onCreate={handleCreate} />
         <ViewPaymentPanel
           open={!!viewingId}
           onOpenChange={(o) => !o && setViewingId(null)}
           payment={payments.find((p) => p.id === viewingId) ?? null}
+          onViewInvoice={(id) => {
+            setViewingInvoiceId(id);
+            setViewingId(null);
+          }}
+        />
+        <ViewInvoicePanel
+          open={!!viewingInvoiceId}
+          onOpenChange={(o) => !o && setViewingInvoiceId(null)}
+          invoice={invoices.find((i) => i.id === viewingInvoiceId) ?? null}
         />
       </div>
 

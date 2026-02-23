@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,7 @@ function OrganizationSettings() {
   });
 
   useEffect(() => {
-    fetch("/api/org/settings")
+    fetch("/api/org/settings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.organization) {
@@ -243,13 +243,27 @@ const SEED_MODULES = [
 ];
 
 function DatabaseSettings() {
+  const [hasDemoData, setHasDemoData] = useState<boolean | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [removingDemo, setRemovingDemo] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmRemoveDemo, setConfirmRemoveDemo] = useState(false);
   const [selectedModules, setSelectedModules] = useState<Set<string>>(
     () => new Set(SEED_MODULES.map((m) => m.id))
   );
+
+  const fetchHasDemoData = useCallback(() => {
+    fetch("/api/org/demo-data", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { hasDemoData: false }))
+      .then((data) => setHasDemoData(data.hasDemoData ?? false))
+      .catch(() => setHasDemoData(false));
+  }, []);
+
+  useEffect(() => {
+    fetchHasDemoData();
+  }, [fetchHasDemoData]);
 
   function toggleModule(id: string) {
     setSelectedModules((prev) => {
@@ -290,6 +304,24 @@ function DatabaseSettings() {
       }
     } finally {
       setSeeding(false);
+      fetchHasDemoData();
+    }
+  }
+
+  async function handleRemoveDemo() {
+    setConfirmRemoveDemo(false);
+    setRemovingDemo(true);
+    try {
+      const res = await fetch("/api/org/demo-data?demoOnly=true", { method: "DELETE" });
+      if (res.ok) {
+        showSuccess("Demo data removed", "Only seeded demo data was deleted. Your data is preserved.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError("Failed to remove demo data", data.error ?? "Please try again.");
+      }
+    } finally {
+      setRemovingDemo(false);
+      fetchHasDemoData();
     }
   }
 
@@ -306,12 +338,14 @@ function DatabaseSettings() {
       }
     } finally {
       setRemoving(false);
+      fetchHasDemoData();
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Load Demo Data */}
+      {/* Load Demo Data - only when no demo data exists */}
+      {hasDemoData === false && (
       <div className="dashboard-card">
         <h2 className="text-[18px] font-semibold text-text-primary">Load Demo Data</h2>
         <p className="mt-1 text-[13px] text-text-secondary">
@@ -322,7 +356,7 @@ function DatabaseSettings() {
           {!confirmSeed ? (
             <Button
               onClick={() => setConfirmSeed(true)}
-              disabled={seeding || removing}
+              disabled={seeding || removing || removingDemo}
               className="h-10 rounded-xl bg-text-primary px-6 text-[13px] font-semibold text-white hover:bg-text-primary/90"
             >
               {seeding ? "Loading..." : "Load Demo Data"}
@@ -365,9 +399,9 @@ function DatabaseSettings() {
                   Deselect all
                 </button>
                 <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    onClick={handleSeed}
-                    disabled={seeding || selectedModules.size === 0}
+              <Button
+                onClick={handleSeed}
+                disabled={seeding || removing || removingDemo || selectedModules.size === 0}
                     className="h-9 rounded-xl bg-text-primary px-5 text-[12px] font-semibold text-white hover:bg-text-primary/90"
                   >
                     {seeding ? "Loading..." : "Confirm"}
@@ -385,6 +419,50 @@ function DatabaseSettings() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Remove Demo Data - only when demo data exists */}
+      {hasDemoData === true && (
+      <div className="dashboard-card border border-border-subtle">
+        <h2 className="text-[18px] font-semibold text-text-primary">Remove Demo Data</h2>
+        <p className="mt-1 text-[13px] text-text-secondary">
+          Delete only seeded demo data (sample customers, invoices, etc.). Your own data will be preserved.
+        </p>
+        <div className="mt-5">
+          {!confirmRemoveDemo ? (
+            <Button
+              onClick={() => setConfirmRemoveDemo(true)}
+              disabled={seeding || removing || removingDemo}
+              variant="outline"
+              className="h-10 rounded-xl border-border-subtle text-[13px] font-medium text-text-secondary hover:border-text-primary/30 hover:bg-text-primary/5 hover:text-text-primary"
+            >
+              {removingDemo ? "Removing..." : "Remove Demo Data"}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface/50 px-4 py-3">
+              <p className="flex-1 text-[13px] font-medium text-text-secondary">
+                Only demo data will be deleted. Your data stays.
+              </p>
+              <Button
+                onClick={handleRemoveDemo}
+                disabled={removingDemo}
+                variant="outline"
+                className="h-9 rounded-xl px-5 text-[12px] font-semibold"
+              >
+                {removingDemo ? "Removing..." : "Remove Demo Data"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmRemoveDemo(false)}
+                className="h-9 rounded-xl text-[12px] font-medium text-text-secondary"
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      )}
 
       {/* Remove All Data */}
       <div className="dashboard-card border border-error/20">
@@ -402,7 +480,7 @@ function DatabaseSettings() {
           {!confirmRemove ? (
             <Button
               onClick={() => setConfirmRemove(true)}
-              disabled={seeding || removing}
+              disabled={seeding || removing || removingDemo}
               className="h-10 rounded-xl bg-error px-6 text-[13px] font-semibold text-white hover:bg-error/90"
             >
               {removing ? "Removing..." : "Remove All Data"}

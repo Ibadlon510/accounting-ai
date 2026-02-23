@@ -16,7 +16,7 @@ export default function ReconciliationPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
   useEffect(() => {
-    fetch("/api/banking")
+    fetch("/api/banking", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { accounts: [] }))
       .then((data) => {
         const accounts = data.accounts ?? [];

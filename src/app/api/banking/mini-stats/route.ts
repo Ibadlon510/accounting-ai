@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { bankAccounts, bankTransactions } from "@/lib/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { bankAccounts, bankTransactions, chartOfAccounts, journalEntries, journalLines } from "@/lib/db/schema";
+import { eq, and, sql, desc, inArray, notInArray } from "drizzle-orm";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -130,6 +130,66 @@ export async function GET() {
       balance: parseFloat(r.currentBalance ?? "0"),
     }));
 
+    // Partner-account sums: for each bank-transaction JE, sum the "other" (partner) GL amounts
+    // e.g. Bank Charges, AR, AP, Owner's Equity — the counterpart of the bank line
+    const bankLedgerIds = await db
+      .select({ id: chartOfAccounts.id })
+      .from(chartOfAccounts)
+      .where(
+        and(
+          eq(chartOfAccounts.organizationId, orgId),
+          sql`${chartOfAccounts.code} ~ '^1[01][0-9]{2}$'` // 10xx, 11xx (Cash and Bank)
+        )
+      );
+    const bankIds = bankLedgerIds.map((r) => r.id);
+    let partnerRows: { code: string; name: string; amount: string }[] = [];
+
+    if (bankIds.length > 0) {
+      const jeWithBank = await db
+        .selectDistinct({ journalEntryId: journalLines.journalEntryId })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+        .where(
+          and(
+            eq(journalLines.organizationId, orgId),
+            eq(journalEntries.status, "posted"),
+            inArray(journalLines.accountId, bankIds)
+          )
+        );
+      const jeIds = jeWithBank.map((r) => r.journalEntryId);
+      if (jeIds.length > 0) {
+        const rows = await db
+          .select({
+            code: chartOfAccounts.code,
+            name: chartOfAccounts.name,
+            amount: sql<string>`sum(${journalLines.baseCurrencyDebit}::numeric + ${journalLines.baseCurrencyCredit}::numeric)`,
+          })
+          .from(journalLines)
+          .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+          .innerJoin(chartOfAccounts, eq(journalLines.accountId, chartOfAccounts.id))
+          .where(
+            and(
+              eq(journalLines.organizationId, orgId),
+              eq(journalEntries.status, "posted"),
+              notInArray(journalLines.accountId, bankIds),
+              inArray(journalLines.journalEntryId, jeIds)
+            )
+          )
+          .groupBy(chartOfAccounts.id, chartOfAccounts.code, chartOfAccounts.name)
+          .orderBy(sql`sum(${journalLines.baseCurrencyDebit}::numeric + ${journalLines.baseCurrencyCredit}::numeric) desc`);
+        partnerRows = rows;
+      }
+    }
+
+    const chartOfAccountsSummary = partnerRows
+      .map((r) => ({
+        code: r.code,
+        name: r.name,
+        balance: parseFloat(r.amount ?? "0"),
+      }))
+      .filter((r) => Math.abs(r.balance) > 0.001);
+    const chartOfAccountsTotal = chartOfAccountsSummary.reduce((s, r) => s + r.balance, 0);
+
     return NextResponse.json({
       totalBalance,
       accountCount: accountRows.length,
@@ -154,6 +214,10 @@ export async function GET() {
         type: t.type,
         date: t.transactionDate,
       })),
+      chartOfAccountsSummary: {
+        byAccount: chartOfAccountsSummary,
+        total: chartOfAccountsTotal,
+      },
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Failed to load banking mini stats";

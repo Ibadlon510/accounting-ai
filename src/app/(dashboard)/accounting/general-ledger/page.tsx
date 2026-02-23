@@ -14,7 +14,7 @@ export default function GeneralLedgerPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
 
   useEffect(() => {
-    fetch("/api/accounting/chart-of-accounts")
+    fetch("/api/accounting/chart-of-accounts", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { accounts: [] })
       .then((d) => setAccounts(d.accounts ?? []))
       .catch(() => {});

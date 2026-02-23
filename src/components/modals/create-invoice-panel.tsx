@@ -38,7 +38,7 @@ interface CreateInvoicePanelProps {
     subtotal: number;
     taxAmount: number;
     total: number;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 function emptyLine(): InvoiceLine {
@@ -99,20 +99,24 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
     setDueDate(d.toISOString().slice(0, 10));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!customerId) { showError("Select a customer"); return; }
     if (lines.some((l) => !l.productId)) { showError("Select a product for each line"); return; }
     if (subtotal <= 0) { showError("Invoice total must be greater than zero"); return; }
     const customer = customers.find((c) => c.id === customerId);
-    onCreate({
-      customerId, customerName: customer?.name ?? "", issueDate, dueDate, lines,
-      subtotal: Math.round(subtotal * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      total: Math.round(total * 100) / 100,
-    });
-    showSuccess("Invoice created", `Invoice for AED ${formatNumber(total)} has been created.`);
-    reset();
-    onOpenChange(false);
+    try {
+      await onCreate({
+        customerId, customerName: customer?.name ?? "", issueDate, dueDate, lines,
+        subtotal: Math.round(subtotal * 100) / 100,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        total: Math.round(total * 100) / 100,
+      });
+      showSuccess("Invoice created", `Invoice for AED ${formatNumber(total)} has been created.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error already shown by onCreate
+    }
   }
 
   return (

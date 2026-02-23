@@ -11,7 +11,7 @@ export const WIDGET_IDS: Record<DashboardVariant, string[]> = {
   purchases: ["metricsRow", "avgBillValue", "paymentRate", "upcomingPayables", "supplierCountTrend", "barChart", "pieChart", "topExpenseCategories", "topSuppliers"],
   documents: ["metricsRow", "successRate", "avgConfidence", "oldestPending", "barChart", "processingByMonth", "pieChart", "documentsByType", "recentDocuments"],
   inventory: ["metricsRow", "reorderAlerts", "stockOutRisk", "inventoryTurnover", "barChart", "pieChart", "valueByCategory", "topItemsByValue", "lowStockTable"],
-  banking: ["metricsRow", "reconciliationRate", "inVsOutThisMonth", "pendingAiMatches", "barChart", "balanceTrend", "pieChart", "recentTransactions", "largestTransactions"],
+  banking: ["metricsRow", "reconciliationRate", "inVsOutThisMonth", "pendingAiMatches", "barChart", "balanceTrend", "pieChart", "chartOfAccountsSummary", "recentTransactions", "largestTransactions"],
 };
 
 export const WIDGET_LABELS: Record<string, string> = {
@@ -49,6 +49,7 @@ export const WIDGET_LABELS: Record<string, string> = {
   balanceTrend: "Balance trend",
   recentTransactions: "Recent transactions",
   largestTransactions: "Largest transactions",
+  chartOfAccountsSummary: "Partner account sums",
 };
 
 function loadPreferences(): Record<DashboardVariant, Record<string, boolean>> {

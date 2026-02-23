@@ -221,12 +221,12 @@ export default function DocumentVerifyPage() {
     setDocumentNotFound(false);
     Promise.all([
       fetch(`/api/documents/${id}`).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/org/chart-of-accounts").then((r) => (r.ok ? r.json() : { accounts: [] })),
-      fetch("/api/sales/customers").then((r) => (r.ok ? r.json() : { customers: [] })),
-      fetch("/api/purchases/suppliers").then((r) => (r.ok ? r.json() : { suppliers: [] })),
-      fetch("/api/banking").then((r) => (r.ok ? r.json() : { accounts: [] })),
-      fetch("/api/sales/invoices").then((r) => (r.ok ? r.json() : { invoices: [] })),
-      fetch("/api/purchases/bills").then((r) => (r.ok ? r.json() : { bills: [] })),
+      fetch("/api/org/chart-of-accounts", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { accounts: [] })),
+      fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })),
+      fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { suppliers: [] })),
+      fetch("/api/banking", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { accounts: [] })),
+      fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { invoices: [] })),
+      fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { bills: [] })),
     ])
       .then(([docData, accData, custData, suppData, bankData, invData, billData]) => {
         const accList = (accData.accounts ?? []) as Account[];
@@ -291,9 +291,11 @@ export default function DocumentVerifyPage() {
         setBankAccounts(bankList);
         if (bankList.length > 0) setBankAccountId((prev) => prev || bankList[0].id);
 
-        type InvItem = { id: string; customerId: string; invoiceNumber: string; total: number; amountDue: number };
+        type InvItem = { id: string; customerId: string; invoiceNumber: string; total: number; amountDue: number; status?: string };
         type BillItem = { id: string; supplierId: string; billNumber: string; total: number; amountDue: number };
-        const invList = ((invData as { invoices?: InvItem[] }).invoices ?? []).map((inv) => ({
+        const invList = ((invData as { invoices?: InvItem[] }).invoices ?? [])
+          .filter((inv) => inv.status !== "draft")
+          .map((inv) => ({
           id: inv.id,
           customerId: inv.customerId,
           invoiceNumber: inv.invoiceNumber,
@@ -651,7 +653,7 @@ export default function DocumentVerifyPage() {
   async function advanceToNext() {
     let nextRoute = "/documents";
     try {
-      const docsRes = await fetch("/api/documents");
+      const docsRes = await fetch("/api/documents", { cache: "no-store" });
       if (docsRes.ok) {
         const docsData = await docsRes.json();
         const pending = (docsData.documents ?? []).filter(
@@ -803,7 +805,7 @@ export default function DocumentVerifyPage() {
                   </div>
                 )}
 
-                {doc?.status === "PROCESSED" && (
+                {(doc?.status === "PROCESSED" || doc?.status === "ARCHIVED") && (
                   <div className="mb-4 rounded-xl border border-border-subtle bg-muted/20 p-5 text-center">
                     <ShieldCheck className="mx-auto mb-2 h-6 w-6 text-success" />
                     <p className="text-[13px] font-medium text-text-primary">This document has already been verified and filed.</p>

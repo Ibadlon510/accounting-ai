@@ -20,7 +20,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import type { InventoryMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json() as Promise<T>;
 }
@@ -56,7 +56,7 @@ export default function InventoryPage() {
   });
 
   useEffect(() => {
-    fetch("/api/inventory")
+    fetch("/api/inventory", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { items: [] })
       .then((d) => setItems((d.items ?? []).map((i: Item) => ({ ...i, totalValue: i.quantityOnHand * i.costPrice }))))
       .catch(() => {});
@@ -69,11 +69,43 @@ export default function InventoryPage() {
     lowStock: items.filter((i) => i.type === "product" && i.trackInventory && i.quantityOnHand <= i.reorderLevel).length,
   };
 
-  function handleCreate(data: Omit<Item, "id" | "totalValue">) {
+  async function handleCreate(data: Omit<Item, "id" | "totalValue">) {
+    const res = await fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: data.name,
+        sku: data.sku,
+        type: data.type,
+        unitOfMeasure: data.unitOfMeasure,
+        salesPrice: data.salesPrice,
+        purchasePrice: data.purchasePrice,
+        quantityOnHand: data.quantityOnHand,
+        reorderLevel: data.reorderLevel,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to create item");
+      throw new Error(json.error ?? "Failed to create item");
+    }
+    const created = json.item as { id: string; name: string; sku: string; type: string; unitOfMeasure: string; salesPrice: number; purchasePrice: number; costPrice: number; quantityOnHand: number; reorderLevel: number; taxCode: string; trackInventory: boolean; isActive: boolean };
     const newItem: Item = {
-      id: `item-${Date.now()}`,
-      ...data,
-      totalValue: data.quantityOnHand * data.costPrice,
+      id: created.id,
+      name: created.name,
+      sku: created.sku,
+      type: created.type,
+      unitOfMeasure: created.unitOfMeasure,
+      salesPrice: created.salesPrice,
+      purchasePrice: created.purchasePrice,
+      costPrice: created.costPrice,
+      quantityOnHand: created.quantityOnHand,
+      reorderLevel: created.reorderLevel,
+      taxCode: created.taxCode,
+      trackInventory: created.trackInventory,
+      isActive: created.isActive,
+      totalValue: created.quantityOnHand * created.costPrice,
     };
     setItems((prev) => [newItem, ...prev]);
   }

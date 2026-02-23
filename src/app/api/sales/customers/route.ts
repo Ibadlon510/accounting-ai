@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { customers } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { customers, invoices } from "@/lib/db/schema";
+import { eq, sql, and, ne } from "drizzle-orm";
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -43,6 +43,28 @@ export async function GET() {
       .where(eq(customers.organizationId, orgId))
       .orderBy(sql`${customers.name} asc`);
 
+    const outstandingRows = await db
+      .select({
+        customerId: invoices.customerId,
+        outstanding: sql<string>`coalesce(sum(${invoices.amountDue}::numeric), 0)`,
+      })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.organizationId, orgId),
+          ne(invoices.status, "draft"),
+          ne(invoices.status, "cancelled")
+        )
+      )
+      .groupBy(invoices.customerId);
+
+    const outstandingMap = new Map<string, number>();
+    for (const r of outstandingRows) {
+      if (r.customerId) {
+        outstandingMap.set(r.customerId, parseFloat(r.outstanding ?? "0"));
+      }
+    }
+
     return NextResponse.json({
       customers: rows.map((c) => ({
         id: c.id,
@@ -56,8 +78,7 @@ export async function GET() {
         creditLimit: parseFloat(c.creditLimit ?? "0"),
         paymentTermsDays: c.paymentTermsDays,
         isActive: c.isActive,
-        totalRevenue: 0,
-        outstandingBalance: 0,
+        outstandingBalance: outstandingMap.get(c.id) ?? 0,
       })),
     });
   } catch (e: unknown) {

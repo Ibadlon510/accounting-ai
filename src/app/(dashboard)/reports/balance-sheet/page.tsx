@@ -37,7 +37,7 @@ export default function BalanceSheetPage() {
   const [stats, setStats] = useState({ bankBalance: 0, receivables: 0, payables: 0 });
 
   useEffect(() => {
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) setStats({

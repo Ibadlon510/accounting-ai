@@ -198,6 +198,7 @@ export const journalEntries = pgTable("journal_entries", {
   totalCredit: numeric("total_credit", { precision: 18, scale: 2 }).notNull().default("0"),
   postedAt: timestamp("posted_at", { withTimezone: true }),
   postedBy: uuid("posted_by").references(() => users.id),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -273,6 +274,7 @@ export const customers = pgTable("customers", {
   paymentTermsDays: integer("payment_terms_days").default(30),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes"),
+  isDemo: boolean("is_demo").notNull().default(false), // true = seeded demo data, safe to remove
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -294,6 +296,7 @@ export const suppliers = pgTable("suppliers", {
   paymentTermsDays: integer("payment_terms_days").default(30),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -321,6 +324,7 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -366,6 +370,7 @@ export const bills = pgTable("bills", {
   notes: text("notes"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -407,6 +412,7 @@ export const payments = pgTable("payments", {
   reference: varchar("reference", { length: 100 }),
   notes: text("notes"),
   journalEntryId: uuid("journal_entry_id"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -443,6 +449,7 @@ export const items = pgTable("items", {
   quantityOnHand: numeric("quantity_on_hand", { precision: 18, scale: 4 }).default("0"),
   reorderLevel: numeric("reorder_level", { precision: 18, scale: 4 }),
   isActive: boolean("is_active").notNull().default(true),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -463,15 +470,20 @@ export const inventoryMovements = pgTable("inventory_movements", {
   referenceType: varchar("reference_type", { length: 20 }), // invoice, bill
   referenceId: uuid("reference_id"),
   notes: text("notes"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Bank Accounts ──────────────────────────────────────────
+export const bankAccountTypeValues = ["bank", "credit_card"] as const;
+export type BankAccountType = (typeof bankAccountTypeValues)[number];
+
 export const bankAccounts = pgTable("bank_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
+  accountType: varchar("account_type", { length: 20 }).notNull().default("bank"), // bank | credit_card
   accountName: varchar("account_name", { length: 255 }).notNull(),
   bankName: varchar("bank_name", { length: 255 }),
   accountNumber: varchar("account_number", { length: 50 }),
@@ -481,6 +493,7 @@ export const bankAccounts = pgTable("bank_accounts", {
   ledgerAccountId: uuid("ledger_account_id").references(() => chartOfAccounts.id),
   currentBalance: numeric("current_balance", { precision: 18, scale: 2 }).default("0"),
   isActive: boolean("is_active").notNull().default(true),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -506,6 +519,7 @@ export const bankTransactions = pgTable("bank_transactions", {
   importBatch: varchar("import_batch", { length: 50 }),
   transferReference: varchar("transfer_reference", { length: 50 }),
   paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "set null" }),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -522,6 +536,7 @@ export const bankStatements = pgTable("bank_statements", {
   fileName: varchar("file_name", { length: 255 }),
   s3Key: text("s3_key"),
   status: varchar("status", { length: 20 }).notNull().default("pending"),
+  isDemo: boolean("is_demo").notNull().default(false),
 });
 
 // ─── Bank Statement Lines ───────────────────────────────────
@@ -572,6 +587,7 @@ export const vatReturns = pgTable("vat_returns", {
   filedAt: timestamp("filed_at", { withTimezone: true }),
   filedBy: uuid("filed_by").references(() => users.id),
   notes: text("notes"),
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

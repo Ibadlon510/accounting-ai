@@ -4,12 +4,14 @@ import { db } from "@/lib/db";
 import {
   invoices,
   bills,
+  billLines,
   customers,
   suppliers,
   bankAccounts,
   bankTransactions,
   vatReturns,
   items,
+  chartOfAccounts,
 } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -39,7 +41,6 @@ export async function GET() {
       .where(
         and(
           eq(invoices.organizationId, orgId),
-          sql`${invoices.status} IN ('sent', 'overdue')`,
           sql`${invoices.dueDate} < current_date`,
           sql`${invoices.amountDue}::numeric > 0`
         )
@@ -112,6 +113,65 @@ export async function GET() {
     const vt = vatRows[0];
     const it = inventoryRows[0];
 
+    // Chart data: monthly income/expenses (Jan–Aug for current year)
+    const yearStart = `${new Date().getFullYear()}-01-01`;
+    const monthlyRevenueRows = await db
+      .select({
+        month: sql<string>`to_char(${invoices.issueDate}::date, 'YYYY-MM')`,
+        revenue: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
+      })
+      .from(invoices)
+      .where(and(eq(invoices.organizationId, orgId), sql`${invoices.issueDate}::date >= ${yearStart}`))
+      .groupBy(sql`to_char(${invoices.issueDate}::date, 'YYYY-MM')`);
+    const monthlyExpenseRows = await db
+      .select({
+        month: sql<string>`to_char(${bills.issueDate}::date, 'YYYY-MM')`,
+        expenses: sql<string>`coalesce(sum(${bills.total}::numeric), 0)`,
+      })
+      .from(bills)
+      .where(and(eq(bills.organizationId, orgId), sql`${bills.issueDate}::date >= ${yearStart}`))
+      .groupBy(sql`to_char(${bills.issueDate}::date, 'YYYY-MM')`);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+    const revenueMap = new Map(monthlyRevenueRows.map((r) => [r.month, parseFloat(r.revenue)]));
+    const expenseMap = new Map(monthlyExpenseRows.map((r) => [r.month, parseFloat(r.expenses)]));
+    const incomeChartData = monthNames.map((name, i) => {
+      const m = `${new Date().getFullYear()}-${String(i + 1).padStart(2, "0")}`;
+      return {
+        month: name,
+        income: revenueMap.get(m) ?? 0,
+        expenses: expenseMap.get(m) ?? 0,
+      };
+    });
+
+    // Sales forecast: weekly-style bars (use monthly as weeks W1–W8)
+    const forecastChartData = incomeChartData.map((d, i) => ({
+      week: `W${i + 1}`,
+      sales: d.income,
+      forecast: Math.round(d.income * 1.05) || 0, // simple 5% growth projection
+    }));
+
+    // Expense breakdown by GL category
+    const expenseCategoryRows = await db
+      .select({
+        accountName: chartOfAccounts.name,
+        total: sql<string>`coalesce(sum(${billLines.amount}::numeric), 0)`,
+      })
+      .from(billLines)
+      .innerJoin(bills, eq(billLines.billId, bills.id))
+      .leftJoin(chartOfAccounts, eq(billLines.accountId, chartOfAccounts.id))
+      .where(eq(bills.organizationId, orgId))
+      .groupBy(chartOfAccounts.name, chartOfAccounts.id)
+      .orderBy(sql`sum(${billLines.amount}::numeric) desc`)
+      .limit(6);
+    const expenseColors = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899"];
+    const expenseDonutData = expenseCategoryRows
+      .filter((r) => r.accountName)
+      .map((r, i) => ({
+        name: r.accountName ?? "Other",
+        value: parseFloat(r.total),
+        color: expenseColors[i % expenseColors.length],
+      }));
+
     return NextResponse.json({
       sales: {
         totalRevenue: parseFloat(inv?.totalRevenue ?? "0"),
@@ -141,6 +201,11 @@ export async function GET() {
         totalProducts: it?.totalProducts ?? 0,
         totalValue: parseFloat(it?.totalValue ?? "0"),
         lowStock: it?.lowStock ?? 0,
+      },
+      charts: {
+        incomeChartData,
+        forecastChartData,
+        expenseDonutData,
       },
     });
   } catch (e: unknown) {

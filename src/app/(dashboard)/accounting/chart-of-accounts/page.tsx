@@ -34,7 +34,7 @@ export default function ChartOfAccountsPage() {
   );
 
   useEffect(() => {
-    fetch("/api/org/chart-of-accounts")
+    fetch("/api/org/chart-of-accounts", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { accounts: [] }))
       .then((data) => setAccounts(data.accounts ?? []))
       .finally(() => setLoading(false));

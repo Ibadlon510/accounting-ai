@@ -21,7 +21,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import type { DocumentsMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json() as Promise<T>;
 }
@@ -61,7 +61,7 @@ export default function DocumentsPage() {
   });
 
   function loadDocs() {
-    fetch("/api/documents")
+    fetch("/api/documents", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { documents: [] }))
       .then((data: { documents: DocItem[] }) => setDocuments(data.documents ?? []))
       .finally(() => setLoading(false));

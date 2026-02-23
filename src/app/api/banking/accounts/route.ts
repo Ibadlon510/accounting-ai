@@ -5,6 +5,7 @@ import { bankAccounts, chartOfAccounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 
 type CreateBody = {
+  accountType?: "bank" | "credit_card";
   accountName: string;
   bankName?: string;
   accountNumber?: string;
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { accountName, bankName, accountNumber, iban, swiftCode, currency = "AED" } = body;
+  const { accountType = "bank", accountName, bankName, accountNumber, iban, swiftCode, currency = "AED" } = body;
   if (!accountName?.trim()) {
     return NextResponse.json({ error: "Account name is required" }, { status: 400 });
   }
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
       .insert(bankAccounts)
       .values({
         organizationId: orgId,
+        accountType: accountType === "credit_card" ? "credit_card" : "bank",
         accountName: accountName.trim(),
         bankName: bankName?.trim() || null,
         accountNumber: accountNumber?.trim() || null,
@@ -57,6 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       account: {
         id: account!.id,
+        accountType: account!.accountType ?? "bank",
         accountName: account!.accountName,
         bankName: account!.bankName,
         accountNumber: account!.accountNumber,

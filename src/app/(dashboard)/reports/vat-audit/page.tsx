@@ -14,8 +14,8 @@ export default function VATAuditPage() {
   const [bills, setBills] = useState<Bill[]>([]);
 
   useEffect(() => {
-    fetch("/api/sales/invoices").then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
-    fetch("/api/purchases/bills").then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
+    fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
+    fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
   }, []);
 
   const outputVAT = invoices.reduce((s, inv) => s + inv.taxAmount, 0);

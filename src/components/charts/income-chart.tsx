@@ -75,10 +75,11 @@ export function IncomeChart({ data }: IncomeChartProps) {
           tick={{ fill: "var(--text-meta)", fontSize: 11 }}
           tickFormatter={(v) => {
             if (v === 0) return "0";
-            return `${v / 1000}k`;
+            if (Math.abs(v) >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+            return `${(v / 1000).toFixed(0)}k`;
           }}
           dx={-4}
-          domain={[-50000, 150000]}
+          domain={["auto", "auto"]}
         />
         <Tooltip content={<CustomTooltip />} cursor={false} />
         <Bar dataKey="income" radius={[3, 3, 0, 0]} maxBarSize={18}>

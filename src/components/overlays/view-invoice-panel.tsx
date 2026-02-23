@@ -12,10 +12,14 @@ import {
   EntityPanelField,
   EntityPanelFooter,
 } from "@/components/overlays/entity-panel";
+import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
+import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
 import { formatNumber } from "@/lib/accounting/engine";
+import { FileText, Calendar, User, DollarSign, Receipt, CreditCard, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
 type InvoiceLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; lines: InvoiceLine[] };
-import { FileText, Calendar, User, DollarSign } from "lucide-react";
+type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -30,9 +34,13 @@ interface ViewInvoicePanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   invoice: Invoice | undefined | null;
+  onRecordPayment?: () => void;
+  onViewPaymentReceipt?: (paymentId: string) => void;
+  onConfirm?: () => void;
+  confirming?: boolean;
 }
 
-export function ViewInvoicePanel({ open, onOpenChange, invoice }: ViewInvoicePanelProps) {
+export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment, onViewPaymentReceipt, onConfirm, confirming }: ViewInvoicePanelProps) {
   if (!invoice) return null;
 
   return (
@@ -102,6 +110,15 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice }: ViewInvoicePan
                   value={`AED ${formatNumber(invoice.amountDue)}`}
                 />
               </EntityPanelFieldRow>
+              {(invoice.status === "paid" || invoice.amountPaid > 0) && (
+                <PaymentReceiptSection
+                  receipts={invoice.receipts ?? []}
+                  documentId={invoice.documentId}
+                  paymentId={invoice.paymentId}
+                  amountPaid={invoice.amountPaid}
+                  onViewPaymentReceipt={onViewPaymentReceipt}
+                />
+              )}
             </EntityPanelFieldGroup>
 
             <div className="mt-6">
@@ -140,7 +157,27 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice }: ViewInvoicePan
         <EntityPanelFooter
           onCancel={() => onOpenChange(false)}
           cancelLabel="Close"
-        />
+        >
+          {invoice.status === "draft" && onConfirm && (
+            <Button
+              size="sm"
+              onClick={onConfirm}
+              disabled={confirming}
+              className="mr-auto gap-1.5 rounded-xl bg-text-primary px-5 text-white hover:bg-text-primary/90"
+            >
+              <Send className="h-3.5 w-3.5" /> {confirming ? "Confirming…" : "Confirm invoice"}
+            </Button>
+          )}
+          {onRecordPayment && invoice.amountDue > 0 && invoice.status !== "draft" && (
+            <Button
+              size="sm"
+              onClick={onRecordPayment}
+              className="mr-auto gap-1.5 rounded-xl bg-success px-5 text-white hover:bg-success/90"
+            >
+              <CreditCard className="h-3.5 w-3.5" /> Record Payment
+            </Button>
+          )}
+        </EntityPanelFooter>
       </EntityPanelContent>
     </EntityPanel>
   );

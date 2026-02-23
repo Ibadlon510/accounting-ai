@@ -7,7 +7,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { DashboardPill } from "@/components/dashboard/dashboard-pill";
 
 const navItems = [
-  { href: "/banking", label: "Accounts", icon: Landmark },
+  { href: "/banking/accounts", label: "Accounts", icon: Landmark },
   { href: "/banking/receipts", label: "Receipts", icon: ArrowDownLeft },
   { href: "/banking/payments", label: "Payments", icon: ArrowUpRight },
   { href: "/banking/transfers", label: "Inter-account Transfers", icon: ArrowLeftRight },
@@ -15,16 +15,23 @@ const navItems = [
 ];
 
 const titleByPath: Record<string, string> = {
-  "/banking": "Accounts",
+  "/banking": "Banking",
+  "/banking/accounts": "Accounts",
   "/banking/receipts": "Receipts",
   "/banking/payments": "Payments",
   "/banking/transfers": "Inter-account Transfers",
   "/banking/reconciliation": "Reconciliation",
 };
 
+function getPageTitle(pathname: string): string {
+  if (pathname in titleByPath) return titleByPath[pathname];
+  if (pathname.startsWith("/banking/accounts/") && pathname !== "/banking/accounts") return "Account";
+  return "Banking";
+}
+
 export default function BankingLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const pageTitle = titleByPath[pathname] ?? "Banking";
+  const pageTitle = getPageTitle(pathname);
 
   return (
     <>
@@ -34,6 +41,13 @@ export default function BankingLayout({ children }: { children: React.ReactNode 
             ? [
                 { label: "Workspaces", href: "/workspaces" },
                 { label: "Banking" },
+              ]
+            : pathname.startsWith("/banking/accounts/") && pathname !== "/banking/accounts"
+            ? [
+                { label: "Workspaces", href: "/workspaces" },
+                { label: "Banking", href: "/banking" },
+                { label: "Accounts", href: "/banking/accounts" },
+                { label: pageTitle },
               ]
             : [
                 { label: "Workspaces", href: "/workspaces" },
@@ -47,7 +61,7 @@ export default function BankingLayout({ children }: { children: React.ReactNode 
         <nav className="flex items-center gap-1">
           <DashboardPill />
           {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/banking" && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
             return (
               <Link

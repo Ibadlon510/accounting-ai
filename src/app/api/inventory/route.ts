@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { name: string; sku?: string; type?: string; unitOfMeasure?: string; salesPrice?: number; purchasePrice?: number };
+  let body: { name: string; sku?: string; type?: string; unitOfMeasure?: string; salesPrice?: number; purchasePrice?: number; quantityOnHand?: number; reorderLevel?: number };
   try {
     body = await request.json();
   } catch {
@@ -59,6 +59,8 @@ export async function POST(request: Request) {
   const unitOfMeasure = body.unitOfMeasure ?? "pcs";
   const salesPrice = Number(body.salesPrice) || 0;
   const purchasePrice = Number(body.purchasePrice) || salesPrice;
+  const quantityOnHand = Number(body.quantityOnHand) || 0;
+  const reorderLevel = type === "product" ? (isNaN(Number(body.reorderLevel)) ? 5 : Number(body.reorderLevel)) : null;
 
   try {
     const [row] = await db
@@ -72,8 +74,8 @@ export async function POST(request: Request) {
         salesPrice: String(salesPrice),
         purchasePrice: String(purchasePrice),
         costPrice: String(purchasePrice),
-        quantityOnHand: "0",
-        reorderLevel: type === "product" ? "5" : null,
+        quantityOnHand: String(quantityOnHand),
+        reorderLevel: reorderLevel != null ? String(reorderLevel) : null,
         taxCode: "VAT5",
         trackInventory: type === "product",
         isActive: true,
@@ -90,8 +92,15 @@ export async function POST(request: Request) {
         name: row.name,
         sku: row.sku,
         type: row.type,
+        unitOfMeasure,
         salesPrice: parseFloat(row.salesPrice ?? "0"),
         purchasePrice: parseFloat(row.purchasePrice ?? "0"),
+        costPrice: parseFloat(row.purchasePrice ?? "0"),
+        quantityOnHand,
+        reorderLevel: reorderLevel ?? 0,
+        taxCode: "VAT5",
+        trackInventory: type === "product",
+        isActive: true,
       },
     });
   } catch (e: unknown) {

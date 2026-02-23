@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -18,17 +18,35 @@ import {
 } from "@/components/overlays/entity-panel";
 import { Input } from "@/components/ui/input";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
-import { Landmark, Building2, Hash, Globe, Info } from "lucide-react";
+import { Landmark, CreditCard, Building2, Hash, Globe, Info } from "lucide-react";
 
 const CURRENCIES = ["AED", "USD", "EUR", "GBP", "SAR", "QAR", "BHD", "OMR", "KWD", "INR"];
+
+type AccountType = "bank" | "credit_card";
+
+export interface BankAccountForEdit {
+  id: string;
+  accountType?: string;
+  accountName: string;
+  bankName?: string | null;
+  accountNumber?: string | null;
+  iban?: string | null;
+  swiftCode?: string | null;
+  currency: string;
+}
 
 interface AddBankAccountPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: (account: { id: string; accountName: string; bankName?: string; currency: string }) => void;
+  onSuccess?: (account: { id: string; accountType?: string; accountName: string; bankName?: string; currency: string }) => void;
+  defaultAccountType?: AccountType;
+  /** When provided, panel opens in edit mode with existing account data */
+  account?: BankAccountForEdit | null;
 }
 
-export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAccountPanelProps) {
+export function AddBankAccountPanel({ open, onOpenChange, onSuccess, defaultAccountType = "bank", account }: AddBankAccountPanelProps) {
+  const isEdit = !!account;
+  const [accountType, setAccountType] = useState<AccountType>((account?.accountType as AccountType) ?? defaultAccountType);
   const [accountName, setAccountName] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -37,13 +55,46 @@ export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAc
   const [currency, setCurrency] = useState("AED");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      if (account) {
+        setAccountType((account.accountType as AccountType) ?? "bank");
+        setAccountName(account.accountName ?? "");
+        setBankName(account.bankName ?? "");
+        setAccountNumber(account.accountNumber ?? "");
+        setIban(account.iban ?? "");
+        setSwiftCode(account.swiftCode ?? "");
+        setCurrency(account.currency ?? "AED");
+      } else {
+        setAccountType(defaultAccountType);
+        setAccountName("");
+        setBankName("");
+        setAccountNumber("");
+        setIban("");
+        setSwiftCode("");
+        setCurrency("AED");
+      }
+    }
+  }, [open, account, defaultAccountType]);
+
   function reset() {
-    setAccountName("");
-    setBankName("");
-    setAccountNumber("");
-    setIban("");
-    setSwiftCode("");
-    setCurrency("AED");
+    if (account) {
+      setAccountType((account.accountType as AccountType) ?? "bank");
+      setAccountName(account.accountName ?? "");
+      setBankName(account.bankName ?? "");
+      setAccountNumber(account.accountNumber ?? "");
+      setIban(account.iban ?? "");
+      setSwiftCode(account.swiftCode ?? "");
+      setCurrency(account.currency ?? "AED");
+    } else {
+      setAccountType(defaultAccountType);
+      setAccountName("");
+      setBankName("");
+      setAccountNumber("");
+      setIban("");
+      setSwiftCode("");
+      setCurrency("AED");
+    }
   }
 
   async function handleSave() {
@@ -53,36 +104,70 @@ export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAc
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/banking/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountName: accountName.trim(),
-          bankName: bankName.trim() || undefined,
-          accountNumber: accountNumber.trim() || undefined,
-          iban: iban.trim() || undefined,
-          swiftCode: swiftCode.trim() || undefined,
-          currency,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        showError(err.error ?? "Failed to create bank account");
-        return;
+      if (isEdit && account) {
+        const res = await fetch(`/api/banking/accounts/${account.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountType,
+            accountName: accountName.trim(),
+            bankName: bankName.trim() || undefined,
+            accountNumber: accountNumber.trim() || undefined,
+            iban: iban.trim() || undefined,
+            swiftCode: swiftCode.trim() || undefined,
+            currency,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showError(err.error ?? "Failed to update bank account");
+          return;
+        }
+        const data = await res.json();
+        const updated = data.account;
+        showSuccess("Bank account updated", `${accountName} has been saved.`);
+        onOpenChange(false);
+        onSuccess?.({
+          id: updated.id,
+          accountType: updated.accountType,
+          accountName: updated.accountName,
+          bankName: updated.bankName,
+          currency: updated.currency,
+        });
+      } else {
+        const res = await fetch("/api/banking/accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountType,
+            accountName: accountName.trim(),
+            bankName: bankName.trim() || undefined,
+            accountNumber: accountNumber.trim() || undefined,
+            iban: iban.trim() || undefined,
+            swiftCode: swiftCode.trim() || undefined,
+            currency,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showError(err.error ?? "Failed to create bank account");
+          return;
+        }
+        const data = await res.json();
+        const created = data.account;
+        showSuccess(accountType === "credit_card" ? "Credit card added" : "Bank account added", `${accountName} has been added.`);
+        reset();
+        onOpenChange(false);
+        onSuccess?.({
+          id: created.id,
+          accountType: created.accountType,
+          accountName: created.accountName,
+          bankName: created.bankName,
+          currency: created.currency,
+        });
       }
-      const data = await res.json();
-      const created = data.account;
-      showSuccess("Bank account added", `${accountName} has been added.`);
-      reset();
-      onOpenChange(false);
-      onSuccess?.({
-        id: created.id,
-        accountName: created.accountName,
-        bankName: created.bankName,
-        currency: created.currency,
-      });
     } catch {
-      showError("Failed to create bank account", "Network error. Please try again.");
+      showError(isEdit ? "Failed to update bank account" : "Failed to create bank account", "Network error. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -93,28 +178,54 @@ export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAc
       <EntityPanelContent size="lg">
         <EntityPanelBody>
           <EntityPanelMain>
-            <EntityPanelHeader title="Add Bank Account" />
+            <EntityPanelHeader title={isEdit ? "Edit Bank Account" : (accountType === "credit_card" ? "Add Credit Card" : "Add Bank Account")} />
 
             <EntityPanelAvatar
               name={accountName || "New Account"}
               subtitle={bankName || undefined}
-              fallbackGradient="from-emerald-400 via-teal-300 to-cyan-400"
+              fallbackGradient={accountType === "credit_card" ? "from-violet-400 via-purple-300 to-fuchsia-400" : "from-emerald-400 via-teal-300 to-cyan-400"}
             />
 
             <EntityPanelFieldGroup>
-              <EntityPanelField icon={<Landmark className="h-4 w-4" />} label="Account Name">
+              <EntityPanelField icon={accountType === "credit_card" ? <CreditCard className="h-4 w-4" /> : <Landmark className="h-4 w-4" />} label="Account Type">
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType("bank")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border py-2.5 px-3 text-[13px] font-medium transition-colors ${
+                      accountType === "bank"
+                        ? "border-text-primary bg-text-primary/5 text-text-primary"
+                        : "border-border-subtle text-text-meta hover:border-border-default hover:text-text-secondary"
+                    }`}
+                  >
+                    <Landmark className="h-4 w-4" /> Bank Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountType("credit_card")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border py-2.5 px-3 text-[13px] font-medium transition-colors ${
+                      accountType === "credit_card"
+                        ? "border-text-primary bg-text-primary/5 text-text-primary"
+                        : "border-border-subtle text-text-meta hover:border-border-default hover:text-text-secondary"
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4" /> Credit Card
+                  </button>
+                </div>
+              </EntityPanelField>
+              <EntityPanelField icon={accountType === "credit_card" ? <CreditCard className="h-4 w-4" /> : <Landmark className="h-4 w-4" />} label="Account Name">
                 <Input
                   value={accountName}
                   onChange={(e) => setAccountName(e.target.value)}
-                  placeholder="e.g. Main Operating Account"
+                  placeholder={accountType === "credit_card" ? "e.g. Corporate Amex" : "e.g. Main Operating Account"}
                   className="mt-1 h-8 rounded-lg border-border-subtle text-[14px] font-medium text-text-primary focus-visible:ring-text-primary/20"
                 />
               </EntityPanelField>
-              <EntityPanelField icon={<Building2 className="h-4 w-4" />} label="Bank Name">
+              <EntityPanelField icon={<Building2 className="h-4 w-4" />} label={accountType === "credit_card" ? "Card Issuer" : "Bank Name"}>
                 <Input
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  placeholder="e.g. Emirates NBD"
+                  placeholder={accountType === "credit_card" ? "e.g. Amex, Emirates NBD" : "e.g. Emirates NBD"}
                   className="mt-1 h-8 rounded-lg border-border-subtle text-[14px] font-medium text-text-primary focus-visible:ring-text-primary/20"
                 />
               </EntityPanelField>
@@ -163,7 +274,9 @@ export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAc
             </EntityPanelSidebarSection>
 
             <EntityPanelInfoMessage icon={<Info className="h-3.5 w-3.5" />}>
-              Bank name, account number, IBAN and SWIFT are optional. You can add them later. The account will start with a zero balance.
+              {accountType === "credit_card"
+                ? "Card issuer and last 4 digits are optional. The account will start with a zero balance."
+                : "Bank name, account number, IBAN and SWIFT are optional. You can add them later. The account will start with a zero balance."}
             </EntityPanelInfoMessage>
           </EntityPanelSidebar>
         </EntityPanelBody>
@@ -174,7 +287,7 @@ export function AddBankAccountPanel({ open, onOpenChange, onSuccess }: AddBankAc
             onOpenChange(false);
           }}
           onSave={handleSave}
-          saveLabel="Add Bank Account"
+          saveLabel={isEdit ? "Save changes" : (accountType === "credit_card" ? "Add Credit Card" : "Add Bank Account")}
           saveDisabled={!accountName.trim() || saving}
         />
       </EntityPanelContent>

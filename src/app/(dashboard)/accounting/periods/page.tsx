@@ -20,7 +20,7 @@ export default function PeriodsPage() {
   const [fiscalYear, setFiscalYear] = useState<FiscalYear>(defaultFY);
 
   useEffect(() => {
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then(() => {
         // Periods/fiscal years would come from a dedicated API

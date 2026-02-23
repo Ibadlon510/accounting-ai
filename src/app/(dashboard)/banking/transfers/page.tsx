@@ -9,7 +9,7 @@ import { TransferPanel } from "@/components/modals/transfer-panel";
 import type { BankingTransfer } from "@/lib/banking/types";
 
 async function fetchTransfers(): Promise<BankingTransfer[]> {
-  const res = await fetch("/api/banking/transfers");
+  const res = await fetch("/api/banking/transfers", { cache: "no-store" });
   if (!res.ok) return [];
   const data = await res.json();
   return data.transfers ?? [];

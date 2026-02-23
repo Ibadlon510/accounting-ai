@@ -39,7 +39,7 @@ interface CreateBillPanelProps {
     subtotal: number;
     taxAmount: number;
     total: number;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 function emptyLine(): BillLine {
@@ -101,21 +101,25 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
     setDueDate(d.toISOString().slice(0, 10));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!supplierId) { showError("Select a supplier"); return; }
     if (!billNumber.trim()) { showError("Bill number is required"); return; }
     if (lines.some((l) => !l.productId)) { showError("Select a product for each line"); return; }
     if (subtotal <= 0) { showError("Bill total must be greater than zero"); return; }
     const supplier = suppliers.find((s) => s.id === supplierId);
-    onCreate({
-      supplierId, supplierName: supplier?.name ?? "", billNumber, issueDate, dueDate, lines,
-      subtotal: Math.round(subtotal * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      total: Math.round(total * 100) / 100,
-    });
-    showSuccess("Bill recorded", `Bill ${billNumber} for AED ${formatNumber(total)} has been recorded.`);
-    reset();
-    onOpenChange(false);
+    try {
+      await onCreate({
+        supplierId, supplierName: supplier?.name ?? "", billNumber, issueDate, dueDate, lines,
+        subtotal: Math.round(subtotal * 100) / 100,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        total: Math.round(total * 100) / 100,
+      });
+      showSuccess("Bill recorded", `Bill ${billNumber} for AED ${formatNumber(total)} has been recorded.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error already shown by onCreate
+    }
   }
 
   return (

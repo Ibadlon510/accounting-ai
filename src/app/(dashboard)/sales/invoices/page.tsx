@@ -7,10 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateInvoicePanel } from "@/components/modals/create-invoice-panel";
 import { ViewInvoicePanel } from "@/components/overlays/view-invoice-panel";
+import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
+import { RecordPaymentPanel } from "@/components/modals/record-payment-panel";
 
 type InvoiceLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; lines: InvoiceLine[] };
+type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
+type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
 type Customer = { id: string; name: string; email: string; phone: string; isActive: boolean };
+type BankAccount = { id: string; accountName: string; currency: string };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -27,19 +31,44 @@ export default function InvoicesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentInvoiceId, setPaymentInvoiceId] = useState<string | null>(null);
+  const [viewingPaymentId, setViewingPaymentId] = useState<string | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  function loadInvoices() {
+    fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
+  }
 
   useEffect(() => {
-    fetch("/api/sales/invoices").then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
-    fetch("/api/sales/customers").then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+    loadInvoices();
+    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch(() => {});
   }, []);
 
-  function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number }) {
-    const newInv: Invoice = {
-      id: `inv-${Date.now()}`, ...data,
-      invoiceNumber: `INV-2026-${String(invoices.length + 1).padStart(3, "0")}`,
-      status: "draft", amountPaid: 0, amountDue: data.total,
-    };
-    setInvoices((prev) => [newInv, ...prev]);
+  async function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number }) {
+    const res = await fetch("/api/sales/invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: data.customerId,
+        issueDate: data.issueDate,
+        dueDate: data.dueDate,
+        lines: data.lines.map((l) => ({ productId: l.productId, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, taxRate: l.taxRate, taxAmount: l.taxAmount })),
+        subtotal: data.subtotal,
+        taxAmount: data.taxAmount,
+        total: data.total,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to create invoice");
+      throw new Error(json.error ?? "Failed to create invoice");
+    }
+    const inv = json.invoice as Invoice;
+    setInvoices((prev) => [inv, ...prev]);
   }
 
   const filtered = invoices.filter(
@@ -63,6 +92,70 @@ export default function InvoicesPage() {
           open={!!viewingId}
           onOpenChange={(o) => !o && setViewingId(null)}
           invoice={invoices.find((i) => i.id === viewingId) ?? null}
+          onViewPaymentReceipt={(id) => setViewingPaymentId(id)}
+          onRecordPayment={() => {
+            setPaymentInvoiceId(viewingId);
+            setViewingId(null);
+            setPaymentOpen(true);
+          }}
+          onConfirm={async () => {
+            if (!viewingId) return;
+            setConfirmingId(viewingId);
+            try {
+              const res = await fetch(`/api/sales/invoices/${viewingId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "sent" }),
+              });
+              const json = await res.json();
+              if (!res.ok) {
+                const { showError } = await import("@/lib/utils/toast-helpers");
+                showError(json.error ?? "Failed to confirm invoice");
+                return;
+              }
+              const { showSuccess } = await import("@/lib/utils/toast-helpers");
+              showSuccess("Invoice confirmed", "You can now record payments against this invoice.");
+              loadInvoices();
+            } finally {
+              setConfirmingId(null);
+            }
+          }}
+          confirming={!!viewingId && confirmingId === viewingId}
+        />
+        <ViewPaymentPanel
+          open={!!viewingPaymentId}
+          onOpenChange={(o) => !o && setViewingPaymentId(null)}
+          paymentId={viewingPaymentId}
+        />
+        <RecordPaymentPanel
+          open={paymentOpen}
+          onOpenChange={setPaymentOpen}
+          bankAccounts={bankAccounts}
+          invoices={invoices.filter((i) => i.amountDue > 0 && i.status !== "draft").map((i) => ({ id: i.id, customerId: i.customerId, invoiceNumber: i.invoiceNumber, customerName: i.customerName, amountDue: i.amountDue }))}
+          preSelectedInvoiceId={paymentInvoiceId}
+          onCreate={async (data) => {
+            const res = await fetch("/api/banking/receipts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                receiptType: "customer_payment",
+                date: data.paymentDate,
+                bankAccountId: data.bankAccountId,
+                amount: data.amount,
+                customerId: data.customerId,
+                allocations: [{ invoiceId: data.invoiceId, amount: data.amount }],
+                reference: data.reference || undefined,
+              }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+              const { showError } = await import("@/lib/utils/toast-helpers");
+              showError(json.error ?? "Failed to record payment");
+              throw new Error(json.error);
+            }
+            loadInvoices();
+            setPaymentInvoiceId(null);
+          }}
         />
       </div>
 

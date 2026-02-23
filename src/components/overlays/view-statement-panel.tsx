@@ -19,7 +19,7 @@ import { comingSoon } from "@/lib/utils/toast-helpers";
 
 interface StatementEntry {
   date: string;
-  type: "Invoice" | "Payment";
+  type: "Invoice" | "Credit Note" | "Receipt" | "Refund";
   ref: string;
   debit: number;
   credit: number;
@@ -27,10 +27,14 @@ interface StatementEntry {
 
 export interface Statement {
   customer: { id: string; name: string; city: string; country: string };
-  invoices: Array<{ issueDate: string; invoiceNumber: string; total: number }>;
-  payments: Array<{ paymentDate: string; paymentNumber: string; amount: number }>;
+  invoices: Array<{ id: string; issueDate: string; invoiceNumber: string; total: number }>;
+  creditNotes: Array<{ id: string; issueDate: string; creditNoteNumber: string; total: number }>;
+  payments: Array<{ id: string; paymentDate: string; paymentNumber: string; amount: number }>;
+  refunds: Array<{ id: string; paymentDate: string; paymentNumber: string; amount: number }>;
   totalInvoiced: number;
+  totalCreditNotes: number;
   totalPaid: number;
+  totalRefunded: number;
   balance: number;
 }
 
@@ -51,12 +55,26 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
       debit: inv.total,
       credit: 0,
     })),
+    ...(statement.creditNotes ?? []).map((cn) => ({
+      date: cn.issueDate,
+      type: "Credit Note" as const,
+      ref: cn.creditNoteNumber,
+      debit: 0,
+      credit: cn.total,
+    })),
     ...statement.payments.map((p) => ({
       date: p.paymentDate,
-      type: "Payment" as const,
+      type: "Receipt" as const,
       ref: p.paymentNumber,
       debit: 0,
       credit: p.amount,
+    })),
+    ...(statement.refunds ?? []).map((r) => ({
+      date: r.paymentDate,
+      type: "Refund" as const,
+      ref: r.paymentNumber,
+      debit: r.amount,
+      credit: 0,
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -86,9 +104,21 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
                   value={`AED ${formatNumber(statement.totalInvoiced)}`}
                 />
                 <EntityPanelField
+                  icon={<FileText className="h-4 w-4" />}
+                  label="Credit Notes"
+                  value={`AED ${formatNumber(statement.totalCreditNotes ?? 0)}`}
+                />
+              </EntityPanelFieldRow>
+              <EntityPanelFieldRow>
+                <EntityPanelField
                   icon={<CreditCard className="h-4 w-4" />}
-                  label="Total Paid"
+                  label="Receipts"
                   value={`AED ${formatNumber(statement.totalPaid)}`}
+                />
+                <EntityPanelField
+                  icon={<CreditCard className="h-4 w-4" />}
+                  label="Refunds"
+                  value={`AED ${formatNumber(statement.totalRefunded ?? 0)}`}
                 />
               </EntityPanelFieldRow>
               <EntityPanelField
@@ -134,7 +164,15 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
                         <div className="col-span-2 text-text-secondary">{entry.date}</div>
                         <div className="col-span-1">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${entry.type === "Invoice" ? "bg-blue-100 text-blue-700" : "bg-success-light text-success"}`}
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              entry.type === "Invoice"
+                                ? "bg-blue-100 text-blue-700"
+                                : entry.type === "Credit Note"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : entry.type === "Refund"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-success-light text-success"
+                            }`}
                           >
                             {entry.type}
                           </span>

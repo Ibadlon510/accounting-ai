@@ -29,7 +29,7 @@ export function ProductSelect({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/inventory")
+    fetch("/api/inventory", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { items: [] }))
       .then((d) => {
         const items = (d.items ?? []).filter(

@@ -17,7 +17,7 @@ import type { DashboardStats } from "@/lib/dashboard/mini-stats-types";
 import type { PurchasesMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json() as Promise<T>;
 }

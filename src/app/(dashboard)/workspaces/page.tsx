@@ -46,7 +46,7 @@ export default function WorkspacesPage() {
   const [stats, setStats] = useState({ totalRevenue: 0, totalExpenses: 0, totalBalance: 0 });
 
   useEffect(() => {
-    fetch("/api/org/list")
+    fetch("/api/org/list", { cache: "no-store" })
       .then((res) => res.ok ? res.json() : { organizations: [] })
       .then((data: { organizations: OrgItem[] }) => {
         setOrganizations(data.organizations ?? []);
@@ -54,7 +54,7 @@ export default function WorkspacesPage() {
       })
       .catch(() => setLoading(false));
 
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) {

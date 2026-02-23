@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
-import { Search, Plus, Mail, Phone } from "lucide-react";
+import { Search, Plus, Mail, Phone, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
@@ -17,7 +17,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
 
   useEffect(() => {
-    fetch("/api/sales/customers").then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
   }, []);
 
   const filtered = customers.filter((c) =>
@@ -55,8 +55,23 @@ export default function CustomersPage() {
           <div key={customer.id} className="col-span-4">
             <button
               onClick={() => setViewingId(customer.id)}
-              className="w-full text-left dashboard-card cursor-pointer transition-all hover:shadow-lg"
+              className={`w-full text-left dashboard-card cursor-pointer transition-all hover:shadow-lg overflow-hidden ${
+                customer.outstandingBalance > 0 ? "ring-1 ring-error/20" : ""
+              }`}
             >
+              <div
+                className={`-mx-6 -mt-6 mb-4 px-6 py-4 flex items-center justify-between ${
+                  customer.outstandingBalance > 0 ? "bg-error/8" : "bg-success/8"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Wallet className={`h-5 w-5 ${customer.outstandingBalance > 0 ? "text-error" : "text-success"}`} />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-meta">Outstanding</span>
+                </div>
+                <p className={`text-[22px] font-bold tabular-nums ${customer.outstandingBalance > 0 ? "text-error" : "text-success"}`}>
+                  AED {formatNumber(customer.outstandingBalance)}
+                </p>
+              </div>
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-[15px] font-semibold text-text-primary">{customer.name}</h3>
@@ -68,23 +83,15 @@ export default function CustomersPage() {
               </div>
               <div className="mt-4 space-y-1.5">
                 <div className="flex items-center gap-2 text-[12px] text-text-secondary">
-                  <Mail className="h-3.5 w-3.5" />{customer.email}
+                  <Mail className="h-3.5 w-3.5 shrink-0" />{customer.email}
                 </div>
                 <div className="flex items-center gap-2 text-[12px] text-text-secondary">
-                  <Phone className="h-3.5 w-3.5" />{customer.phone}
+                  <Phone className="h-3.5 w-3.5 shrink-0" />{customer.phone}
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-border-subtle pt-3">
-                <div>
-                  <p className="text-[11px] text-text-meta">Outstanding</p>
-                  <p className={`text-[15px] font-semibold ${customer.outstandingBalance > 0 ? "text-error" : "text-success"}`}>
-                    AED {formatNumber(customer.outstandingBalance)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-text-meta">Credit Limit</p>
-                  <p className="text-[13px] font-medium text-text-primary">AED {formatNumber(customer.creditLimit)}</p>
-                </div>
+              <div className="mt-4 pt-3 border-t border-border-subtle">
+                <p className="text-[11px] text-text-meta">Credit Limit</p>
+                <p className="text-[13px] font-medium text-text-primary">AED {formatNumber(customer.creditLimit)}</p>
               </div>
             </button>
           </div>

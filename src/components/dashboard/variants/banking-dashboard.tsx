@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, Tooltip,
   Legend,
 } from "recharts";
-import { Percent, ArrowDownLeft, ArrowUpRight, Sparkles, Landmark, CreditCard } from "lucide-react";
+import { Percent, ArrowDownLeft, ArrowUpRight, Sparkles, Landmark, CreditCard, BookOpen } from "lucide-react";
 import { DashboardWidget } from "../dashboard-widget";
 import { ChartTooltip } from "@/components/charts/chart-tooltip";
 import {
@@ -298,6 +298,36 @@ export function BankingDashboard({ mini, isVisible, layout = "popover" }: Props)
         )}
       </DashboardWidget>
 
+      {/* ── Partner Account Sums (counterpart of bank transactions) ─── */}
+      <DashboardWidget
+        widgetId="chartOfAccountsSummary"
+        visible={isVisible("chartOfAccountsSummary")}
+        cardWrap={isPage}
+      >
+        {isPage ? (
+          <WidgetTitle title="Partner Account Sums" subtitle="e.g. Bank Charges, AR, AP, Owner's Equity" />
+        ) : (
+          <p className="text-xs font-medium text-muted-foreground mb-2">Partner account sums</p>
+        )}
+        {(mini.chartOfAccountsSummary?.byAccount ?? []).length === 0 ? (
+          <EmptyWidget icon={BookOpen} message="No bank transaction flows yet" />
+        ) : (
+          <div className="space-y-2">
+            {(mini.chartOfAccountsSummary?.byAccount ?? []).map((a, i) => (
+              <div key={i} className="flex items-center justify-between text-[13px]">
+                <span className="text-text-secondary truncate">
+                  <span className="font-mono text-[11px] text-muted-foreground mr-1.5">{a.code}</span>
+                  {a.name}
+                </span>
+                <span className="font-semibold font-mono shrink-0 text-text-primary">
+                  {formatCurrency(a.balance)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </DashboardWidget>
+
       {/* ── Recent Transactions ──────────────────────────────────── */}
       <DashboardWidget widgetId="recentTransactions" visible={isVisible("recentTransactions")} cardWrap={isPage}>
         {isPage ? <WidgetTitle title="Recent Transactions" subtitle="Latest activity" /> : (
@@ -345,11 +375,10 @@ export function BankingDashboard({ mini, isVisible, layout = "popover" }: Props)
         )}
       </DashboardWidget>
 
-      {/* ── Largest Transactions (full-width on page) ────────────── */}
+      {/* ── Largest Transactions (beside Recent Transactions) ────── */}
       <DashboardWidget
         widgetId="largestTransactions"
         visible={isVisible("largestTransactions")}
-        className={fullSpanClass}
         cardWrap={isPage}
       >
         {isPage ? <WidgetTitle title="Largest Transactions" subtitle="By amount" /> : (

@@ -77,11 +77,11 @@ export function RecordPaymentBankingPanel({ open, onOpenChange, onSuccess, initi
       reset();
     }
     Promise.all([
-      fetch("/api/banking").then((r) => (r.ok ? r.json() : { accounts: [] })),
-      fetch("/api/purchases/suppliers").then((r) => (r.ok ? r.json() : { suppliers: [] })),
-      fetch("/api/sales/customers").then((r) => (r.ok ? r.json() : { customers: [] })),
-      fetch("/api/purchases/bills").then((r) => (r.ok ? r.json() : { bills: [] })),
-      fetch("/api/sales/invoices").then((r) => (r.ok ? r.json() : { invoices: [] })),
+      fetch("/api/banking", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { accounts: [] })),
+      fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { suppliers: [] })),
+      fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })),
+      fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { bills: [] })),
+      fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { invoices: [] })),
     ]).then(([bank, supp, cust, bil, inv]) => {
       setBankAccounts(bank.accounts ?? []);
       setSuppliers(supp.suppliers ?? []);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import {
   Search,
@@ -26,26 +26,32 @@ export default function JournalEntriesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
 
-  function handleCreate(data: { entryDate: string; description: string; reference: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
-    const newEntry: JournalEntry = {
-      id: `je-${Date.now()}`,
-      organizationId: "org-001",
-      periodId: "period-02",
-      entryNumber: `JE-${data.entryDate.slice(0, 4)}${data.entryDate.slice(5, 7)}-${String(entries.length + 1).padStart(4, "0")}`,
-      entryDate: data.entryDate,
-      description: data.description,
-      reference: data.reference || undefined,
-      sourceType: "manual",
-      status: "posted",
-      currency: "AED",
-      exchangeRate: 1,
-      totalDebit: data.totalDebit,
-      totalCredit: data.totalCredit,
-      lines: data.lines.map((l, i) => ({ ...l, accountCode: "", accountName: "", lineOrder: i + 1 })),
-      postedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-    setEntries((prev) => [newEntry, ...prev]);
+  useEffect(() => {
+    fetch("/api/accounting/journal-entries", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { entries: [] })
+      .then((d) => setEntries(d.entries ?? []))
+      .catch(() => {});
+  }, []);
+
+  async function handleCreate(data: { entryDate: string; description: string; reference: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
+    const res = await fetch("/api/accounting/journal-entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entryDate: data.entryDate,
+        description: data.description,
+        reference: data.reference || undefined,
+        lines: data.lines.map((l) => ({ accountId: l.accountId, description: l.description, debit: l.debit, credit: l.credit })),
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to create journal entry");
+      throw new Error(json.error ?? "Failed to create journal entry");
+    }
+    const entry = json.entry as JournalEntry;
+    setEntries((prev) => [entry, ...prev]);
   }
 
   const filtered = entries.filter(

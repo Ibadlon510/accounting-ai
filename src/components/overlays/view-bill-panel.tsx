@@ -12,10 +12,13 @@ import {
   EntityPanelField,
   EntityPanelFooter,
 } from "@/components/overlays/entity-panel";
+import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
+import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
 import { formatNumber } from "@/lib/accounting/engine";
+import { FileText, Calendar, Building2, DollarSign, Receipt, CreditCard } from "lucide-react";
 type BillLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; lines: BillLine[] };
-import { FileText, Calendar, Building2, DollarSign } from "lucide-react";
+type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: BillLine[] };
+import { Button } from "@/components/ui/button";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -30,9 +33,11 @@ interface ViewBillPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bill: Bill | undefined | null;
+  onRecordPayment?: () => void;
+  onViewPaymentReceipt?: (paymentId: string) => void;
 }
 
-export function ViewBillPanel({ open, onOpenChange, bill }: ViewBillPanelProps) {
+export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onViewPaymentReceipt }: ViewBillPanelProps) {
   if (!bill) return null;
 
   return (
@@ -102,6 +107,15 @@ export function ViewBillPanel({ open, onOpenChange, bill }: ViewBillPanelProps) 
                   value={`AED ${formatNumber(bill.amountDue)}`}
                 />
               </EntityPanelFieldRow>
+              {(bill.status === "paid" || bill.amountPaid > 0) && (
+                <PaymentReceiptSection
+                  receipts={bill.receipts ?? []}
+                  documentId={bill.documentId}
+                  paymentId={bill.paymentId}
+                  amountPaid={bill.amountPaid}
+                  onViewPaymentReceipt={onViewPaymentReceipt}
+                />
+              )}
             </EntityPanelFieldGroup>
 
             <div className="mt-6">
@@ -137,7 +151,17 @@ export function ViewBillPanel({ open, onOpenChange, bill }: ViewBillPanelProps) 
           </EntityPanelMain>
         </EntityPanelBody>
 
-        <EntityPanelFooter onCancel={() => onOpenChange(false)} cancelLabel="Close" />
+        <EntityPanelFooter onCancel={() => onOpenChange(false)} cancelLabel="Close">
+          {onRecordPayment && bill.amountDue > 0 && (
+            <Button
+              size="sm"
+              onClick={onRecordPayment}
+              className="mr-auto gap-1.5 rounded-xl bg-success px-5 text-white hover:bg-success/90"
+            >
+              <CreditCard className="h-3.5 w-3.5" /> Record Payment
+            </Button>
+          )}
+        </EntityPanelFooter>
       </EntityPanelContent>
     </EntityPanel>
   );

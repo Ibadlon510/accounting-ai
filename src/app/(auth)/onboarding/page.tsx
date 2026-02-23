@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,30 @@ const fiscalMonths = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [orgName, setOrgName] = useState("");
+  const [checkingRestore, setCheckingRestore] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/org/auto-restore", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: { singleOrgId?: string | null; orgCount?: number }) => {
+        if (data.singleOrgId) {
+          return fetch("/api/org/switch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId: data.singleOrgId }),
+          }).then(() => {
+            router.replace("/dashboard");
+            return;
+          });
+        }
+        if ((data.orgCount ?? 0) > 1) {
+          router.replace("/workspaces");
+          return;
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCheckingRestore(false));
+  }, [router]);
   const [currency, setCurrency] = useState("AED");
   const [fiscalYear, setFiscalYear] = useState(1);
   const [trn, setTrn] = useState("");
@@ -75,6 +99,14 @@ export default function OnboardingPage() {
         showError("Onboarding failed", String(result.error));
       }
     }
+  }
+
+  if (checkingRestore) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <p className="text-[14px] text-text-secondary">Loading...</p>
+      </div>
+    );
   }
 
   return (

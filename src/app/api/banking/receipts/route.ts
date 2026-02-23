@@ -157,6 +157,11 @@ export async function POST(request: Request) {
       const allocSum = invoiceAllocs.reduce((s, a) => s + (a.amount ?? 0), 0);
       if (Math.abs(allocSum - amount) > 0.01) throw new Error("Sum of allocations must equal amount");
 
+      for (const a of invoiceAllocs) {
+        const [inv] = await tx.select({ status: invoices.status }).from(invoices).where(and(eq(invoices.id, a.invoiceId), eq(invoices.organizationId, orgId))).limit(1);
+        if (inv?.status === "draft") throw new Error("Cannot record receipt against draft invoice. Confirm the invoice first.");
+      }
+
       const [arAccount] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
       if (!arAccount) throw new Error("Chart of accounts missing AR (1210)");
 

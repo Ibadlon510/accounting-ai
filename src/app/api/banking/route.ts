@@ -24,10 +24,12 @@ export async function GET() {
     return NextResponse.json({
       accounts: accounts.map((a) => ({
         id: a.id,
+        accountType: a.accountType ?? "bank",
         accountName: a.accountName,
         bankName: a.bankName,
         accountNumber: a.accountNumber,
         iban: a.iban,
+        swiftCode: a.swiftCode,
         currency: a.currency,
         currentBalance: parseFloat(a.currentBalance ?? "0"),
         isActive: a.isActive,

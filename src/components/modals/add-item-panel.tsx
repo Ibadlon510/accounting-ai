@@ -28,7 +28,7 @@ type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure
 interface AddItemPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (item: Omit<Item, "id" | "totalValue">) => void;
+  onCreate: (item: Omit<Item, "id" | "totalValue">) => void | Promise<void>;
 }
 
 export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps) {
@@ -48,7 +48,7 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
     setTrackInventory(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) { showError("Item name is required"); return; }
     if (!sku.trim()) { showError("SKU is required"); return; }
 
@@ -57,23 +57,27 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
     const qty = Number(quantity) || 0;
     const rl = Number(reorderLevel) || 0;
 
-    onCreate({
-      name: name.trim(),
-      sku: sku.trim().toUpperCase(),
-      type,
-      unitOfMeasure: unit,
-      salesPrice: sp,
-      purchasePrice: pp,
-      costPrice: pp,
-      quantityOnHand: qty,
-      reorderLevel: rl,
-      taxCode: "VAT5",
-      trackInventory: type === "product",
-      isActive: true,
-    });
-    showSuccess("Item created", `${name.trim()} (${sku.trim().toUpperCase()}) has been added to inventory.`);
-    reset();
-    onOpenChange(false);
+    try {
+      await onCreate({
+        name: name.trim(),
+        sku: sku.trim().toUpperCase(),
+        type,
+        unitOfMeasure: unit,
+        salesPrice: sp,
+        purchasePrice: pp,
+        costPrice: pp,
+        quantityOnHand: qty,
+        reorderLevel: rl,
+        taxCode: "VAT5",
+        trackInventory: type === "product",
+        isActive: true,
+      });
+      showSuccess("Item created", `${name.trim()} (${sku.trim().toUpperCase()}) has been added to inventory.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error already shown by onCreate
+    }
   }
 
   return (

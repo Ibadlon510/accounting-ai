@@ -12,7 +12,7 @@ export default function InventoryValuationPage() {
   const [allItems, setAllItems] = useState<Item[]>([]);
 
   useEffect(() => {
-    fetch("/api/inventory")
+    fetch("/api/inventory", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { items: [] })
       .then((d) => setAllItems((d.items ?? []).map((i: Item) => ({ ...i, totalValue: i.quantityOnHand * i.costPrice }))))
       .catch(() => {});

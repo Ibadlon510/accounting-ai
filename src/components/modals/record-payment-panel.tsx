@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -20,22 +20,29 @@ import { formatNumber } from "@/lib/accounting/engine";
 import { Info } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
 
+type BankAccount = { id: string; accountName: string; currency: string };
+
 interface RecordPaymentPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  invoices: { id: string; invoiceNumber: string; customerName: string; amountDue: number }[];
+  bankAccounts: BankAccount[];
+  invoices: { id: string; customerId: string; invoiceNumber: string; customerName: string; amountDue: number }[];
+  preSelectedInvoiceId?: string | null;
   onCreate: (payment: {
     paymentDate: string;
+    bankAccountId: string;
+    customerId: string;
     invoiceId: string;
     invoiceNumber: string;
     customerName: string;
     amount: number;
     method: string;
     reference: string;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
-export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: RecordPaymentPanelProps) {
+export function RecordPaymentPanel({ open, onOpenChange, bankAccounts, invoices, preSelectedInvoiceId, onCreate }: RecordPaymentPanelProps) {
+  const [bankAccountId, setBankAccountId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState<number | "">("");
@@ -44,29 +51,46 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
 
   const selectedInvoice = invoices.find((i) => i.id === invoiceId);
 
+  useEffect(() => {
+    if (open && bankAccounts.length === 1 && !bankAccountId) setBankAccountId(bankAccounts[0].id);
+    if (open && preSelectedInvoiceId) {
+      setInvoiceId(preSelectedInvoiceId);
+      const inv = invoices.find((i) => i.id === preSelectedInvoiceId);
+      if (inv) setAmount(inv.amountDue);
+    }
+  }, [open, bankAccounts, bankAccountId, preSelectedInvoiceId, invoices]);
+
   function reset() {
+    setBankAccountId(bankAccounts.length === 1 ? bankAccounts[0].id : "");
     setInvoiceId(""); setAmount(""); setMethod("bank_transfer"); setReference("");
     setPaymentDate(new Date().toISOString().slice(0, 10));
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (!bankAccountId) { showError("Select a bank account"); return; }
     if (!invoiceId || !selectedInvoice) { showError("Select an invoice"); return; }
     const amt = Number(amount) || 0;
     if (amt <= 0) { showError("Amount must be greater than zero"); return; }
     if (amt > selectedInvoice.amountDue) { showError(`Amount exceeds balance due (AED ${formatNumber(selectedInvoice.amountDue)})`); return; }
 
-    onCreate({
-      paymentDate,
-      invoiceId,
-      invoiceNumber: selectedInvoice.invoiceNumber,
-      customerName: selectedInvoice.customerName,
-      amount: amt,
-      method,
-      reference,
-    });
-    showSuccess("Payment recorded", `AED ${formatNumber(amt)} received for ${selectedInvoice.invoiceNumber}.`);
-    reset();
-    onOpenChange(false);
+    try {
+      await onCreate({
+        paymentDate,
+        bankAccountId,
+        customerId: selectedInvoice.customerId,
+        invoiceId,
+        invoiceNumber: selectedInvoice.invoiceNumber,
+        customerName: selectedInvoice.customerName,
+        amount: amt,
+        method,
+        reference,
+      });
+      showSuccess("Payment recorded", `AED ${formatNumber(amt)} received for ${selectedInvoice.invoiceNumber}.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error already shown by onCreate
+    }
   }
 
   return (
@@ -77,6 +101,17 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
             <EntityPanelHeader title="Record Payment" showAiButton={false} />
 
             <div className="space-y-4">
+              <div>
+                <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Deposit To</Label>
+                <StyledSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="h-10">
+                  <option value="">Select bank account</option>
+                  {bankAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.accountName} ({a.currency})
+                    </option>
+                  ))}
+                </StyledSelect>
+              </div>
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Invoice</Label>
                 <StyledSelect value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); const inv = invoices.find((i) => i.id === e.target.value); if (inv) setAmount(inv.amountDue); }} className="h-10">
@@ -135,8 +170,12 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
           <EntityPanelSidebar>
             <EntityPanelSidebarHeader title="Payment Info" />
             <EntityPanelSidebarSection title="Deposit To">
-              <p className="text-[14px] font-medium text-text-primary">Emirates NBD — Current</p>
-              <p className="text-[11px] text-text-meta">AED Account</p>
+              <p className="text-[14px] font-medium text-text-primary">
+                {bankAccounts.find((a) => a.id === bankAccountId)?.accountName ?? "Select account"}
+              </p>
+              <p className="text-[11px] text-text-meta">
+                {bankAccounts.find((a) => a.id === bankAccountId)?.currency ?? "AED"} Account
+              </p>
             </EntityPanelSidebarSection>
             <EntityPanelInfoMessage icon={<Info className="h-3.5 w-3.5" />}>
               A journal entry will be automatically created to debit the bank account and credit accounts receivable.
@@ -148,7 +187,7 @@ export function RecordPaymentPanel({ open, onOpenChange, invoices, onCreate }: R
           onCancel={() => { reset(); onOpenChange(false); }}
           onSave={handleSave}
           saveLabel="Record Payment"
-          saveDisabled={!invoiceId || !amount || Number(amount) <= 0}
+          saveDisabled={!bankAccountId || !invoiceId || !amount || Number(amount) <= 0}
         />
       </EntityPanelContent>
     </EntityPanel>

@@ -12,7 +12,7 @@ export default function ProfitAndLossPage() {
   const [stats, setStats] = useState({ revenue: 0, expenses: 0 });
 
   useEffect(() => {
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) setStats({ revenue: data.sales?.totalRevenue ?? 0, expenses: data.purchases?.totalExpenses ?? 0 });

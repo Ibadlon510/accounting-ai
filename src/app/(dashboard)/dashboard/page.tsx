@@ -30,6 +30,11 @@ interface DashboardStats {
   banking: { totalBalance: number; unreconciled: number };
   vat: { totalOutputVat: number; totalInputVat: number; netPayable: number };
   inventory: { totalProducts: number; totalValue: number; lowStock: number };
+  charts?: {
+    incomeChartData: Array<{ month: string; income: number; expenses: number }>;
+    forecastChartData: Array<{ week: string; sales: number; forecast: number }>;
+    expenseDonutData: Array<{ name: string; value: number; color: string }>;
+  };
 }
 
 const emptyStats: DashboardStats = {
@@ -45,7 +50,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/dashboard/stats")
+    fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : emptyStats))
       .then((data) => setStats(data))
       .catch(() => {})
@@ -143,7 +148,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#0F172A]" />Expenses</div>
               </div>
             </div>
-            <IncomeChart />
+            <IncomeChart data={stats.charts?.incomeChartData} />
             <div className="mt-4 flex items-center gap-6 border-t border-border-subtle pt-4">
               <div>
                 <p className="text-[11px] text-text-meta">Gross Margin</p>
@@ -216,7 +221,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success/40" />Forecast</div>
               </div>
             </div>
-            <ForecastBarChart />
+            <ForecastBarChart data={stats.charts?.forecastChartData} />
           </div>
         </div>
 
@@ -228,7 +233,7 @@ export default function DashboardPage() {
                 <p className="text-[12px] text-text-meta">By GL category</p>
               </div>
             </div>
-            <ExpenseDonut />
+            <ExpenseDonut data={stats.charts?.expenseDonutData} />
           </div>
         </div>
       </div>

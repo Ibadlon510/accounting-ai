@@ -34,7 +34,8 @@ export function ForecastBarChart({ variant = "green", data }: ForecastBarChartPr
           dataKey="week"
           axisLine={false}
           tickLine={false}
-          tick={false}
+          tick={{ fill: "var(--text-meta)", fontSize: 11 }}
+          dy={4}
         />
         <YAxis hide />
         <Bar dataKey="sales" radius={[2, 2, 0, 0]} maxBarSize={12}>

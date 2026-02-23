@@ -38,7 +38,7 @@ export function TransferPanel({ open, onOpenChange, onSuccess }: TransferPanelPr
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/banking")
+    fetch("/api/banking", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { accounts: [] }))
       .then((d) => setBankAccounts(d.accounts ?? []));
   }, [open]);

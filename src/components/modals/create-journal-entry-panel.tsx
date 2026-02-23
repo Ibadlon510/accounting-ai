@@ -42,7 +42,7 @@ interface CreateJournalEntryPanelProps {
     lines: JournalLine[];
     totalDebit: number;
     totalCredit: number;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 function emptyLine(): JournalLine {
@@ -60,7 +60,7 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
 
   useEffect(() => {
     if (open) {
-      fetch("/api/org/chart-of-accounts")
+      fetch("/api/org/chart-of-accounts", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : { accounts: [] }))
         .then((data) => {
           const list = (data.accounts ?? []) as Array<{ id: string; code: string; name: string }>;
@@ -128,7 +128,7 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
     const validation = validateJournalEntry({
       description,
       entryDate,
@@ -144,14 +144,18 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
       return;
     }
 
-    onCreate({
-      entryDate, description, reference, lines,
-      totalDebit: totals.totalDebit,
-      totalCredit: totals.totalCredit,
-    });
-    showSuccess("Journal entry created", `Entry for AED ${formatNumber(totals.totalDebit)} has been posted.`);
-    reset();
-    onOpenChange(false);
+    try {
+      await onCreate({
+        entryDate, description, reference, lines,
+        totalDebit: totals.totalDebit,
+        totalCredit: totals.totalCredit,
+      });
+      showSuccess("Journal entry created", `Entry for AED ${formatNumber(totals.totalDebit)} has been posted.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error already shown by onCreate
+    }
   }
 
   return (

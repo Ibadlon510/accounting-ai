@@ -62,6 +62,10 @@ export interface BankingMiniStats {
   accountBalances: { name: string; balance: number }[];
   recentTransactions: { id: string; description: string; amount: number; type: string; date: string }[];
   largestTransactions: { id: string; description: string; amount: number; type: string; date: string }[];
+  chartOfAccountsSummary?: {
+    byAccount: { code: string; name: string; balance: number }[];
+    total: number;
+  };
 }
 
 export interface DashboardStats {
