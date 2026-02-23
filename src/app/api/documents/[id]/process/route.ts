@@ -5,8 +5,11 @@ import { documents, organizations } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getObjectBytes, isVaultConfigured } from "@/lib/storage/vault";
 import { extractInvoiceFromImage } from "@/lib/ai/extract-invoice";
+import { parseBankStatement, extractBankStatementFromImage } from "@/lib/banking/parse-statement";
 import { auditLogs } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
+
+const BANK_STATEMENT_MIMES = ["text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
 export async function POST(
   _request: Request,
@@ -24,12 +27,6 @@ export async function POST(
     .limit(1);
   if (org?.subscriptionPlan === "ARCHIVE") {
     return NextResponse.json({ error: "Archive mode: read-only. Restore subscription to process." }, { status: 403 });
-  }
-  if (!org || Number(org.tokenBalance ?? 0) < 1) {
-    return NextResponse.json(
-      { error: "Insufficient token balance. Upgrade or refill to process documents." },
-      { status: 402 }
-    );
   }
 
   if (!isVaultConfigured()) {
@@ -63,7 +60,72 @@ export async function POST(
     return NextResponse.json({ error: "Failed to read file" }, { status: 500 });
   }
 
-  const result = await extractInvoiceFromImage(fileData.body, fileData.contentType);
+  const isCsvExcel = BANK_STATEMENT_MIMES.includes(fileData.contentType);
+  const isBankStatement = doc.documentType === "bank_statement" || isCsvExcel;
+
+  if (isBankStatement) {
+    let parseResult: { ok: true; transactions: import("@/lib/banking/parse-statement").ParsedTransaction[] } | { ok: false; error: string };
+    if (isCsvExcel) {
+      parseResult = parseBankStatement(Buffer.from(fileData.body));
+    } else {
+      parseResult = await extractBankStatementFromImage(fileData.body, fileData.contentType);
+    }
+    if (!parseResult.ok) {
+      await db
+        .update(documents)
+        .set({ status: "PROCESSING_FAILED", lastError: parseResult.error })
+        .where(eq(documents.id, documentId));
+      return NextResponse.json({ error: parseResult.error }, { status: 422 });
+    }
+
+    await db
+      .update(documents)
+      .set({
+        documentType: "bank_statement",
+        extractedData: { transactions: parseResult.transactions } as unknown as Record<string, unknown>,
+        aiConfidence: null,
+        status: "PENDING",
+        lastError: null,
+      })
+      .where(eq(documents.id, documentId));
+
+    const session = await auth();
+    await db.insert(auditLogs).values({
+      organizationId: orgId,
+      userId: session?.user?.id,
+      action: "document_processing_completed",
+      entity: "documents",
+      entityId: documentId,
+      metadata: { documentType: "bank_statement", count: parseResult.transactions.length },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      extractedData: { transactions: parseResult.transactions },
+      confidence: 1,
+      status: "PENDING",
+    });
+  }
+
+  if (!org || Number(org.tokenBalance ?? 0) < 1) {
+    return NextResponse.json(
+      { error: "Insufficient token balance. Upgrade or refill to process documents." },
+      { status: 402 }
+    );
+  }
+
+  let result: Awaited<ReturnType<typeof extractInvoiceFromImage>>;
+  try {
+    result = await extractInvoiceFromImage(fileData.body, fileData.contentType);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unexpected extraction error";
+    console.error("[process-doc] Unhandled extraction error:", msg);
+    await db
+      .update(documents)
+      .set({ status: "PROCESSING_FAILED", lastError: msg })
+      .where(eq(documents.id, documentId));
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   if (!result.ok) {
     await db
@@ -77,9 +139,19 @@ export async function POST(
     ? "PENDING"
     : "FLAGGED";
 
+  const knownDocTypes = ["purchase_invoice", "sales_invoice", "receipt", "credit_note", "bank_statement"];
+  const rawDocType = result.data.document_type ?? "purchase_invoice";
+  const docType = knownDocTypes.includes(rawDocType)
+    ? rawDocType
+    : /sales|proforma/i.test(rawDocType)
+      ? "sales_invoice"
+      : /credit/i.test(rawDocType)
+        ? "credit_note"
+        : "purchase_invoice";
   await db
     .update(documents)
     .set({
+      documentType: docType,
       extractedData: result.data as unknown as Record<string, unknown>,
       aiConfidence: String(result.confidence),
       status,

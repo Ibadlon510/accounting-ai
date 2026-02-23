@@ -1,20 +1,28 @@
 "use client";
 
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockInvoices } from "@/lib/mock/sales-data";
-import { mockBills } from "@/lib/mock/purchases-data";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Download, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { comingSoon } from "@/lib/utils/toast-helpers";
 
+type Inv = { invoiceNumber: string; customerName: string; issueDate: string; subtotal: number; taxAmount: number };
+type Bill = { billNumber: string; supplierName: string; issueDate: string; subtotal: number; taxAmount: number };
+
 export default function VATAuditPage() {
-  const outputVAT = mockInvoices.reduce((s, inv) => s + inv.taxAmount, 0);
-  const inputVAT = mockBills.reduce((s, b) => s + b.taxAmount, 0);
+  const [invoices, setInvoices] = useState<Inv[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+
+  useEffect(() => {
+    fetch("/api/sales/invoices").then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
+    fetch("/api/purchases/bills").then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
+  }, []);
+
+  const outputVAT = invoices.reduce((s, inv) => s + inv.taxAmount, 0);
+  const inputVAT = bills.reduce((s, b) => s + b.taxAmount, 0);
   const netPayable = outputVAT - inputVAT;
 
-  const outputLines = mockInvoices.map((inv) => ({
+  const outputLines = invoices.map((inv) => ({
     date: inv.issueDate,
     ref: inv.invoiceNumber,
     entity: inv.customerName,
@@ -23,7 +31,7 @@ export default function VATAuditPage() {
     type: "output" as const,
   }));
 
-  const inputLines = mockBills.map((b) => ({
+  const inputLines = bills.map((b) => ({
     date: b.issueDate,
     ref: b.billNumber,
     entity: b.supplierName,
@@ -36,9 +44,7 @@ export default function VATAuditPage() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Reports", href: "/reports" }, { label: "VAT Audit" }]} />
-      <div className="flex items-center justify-between">
-        <PageHeader title="VAT Audit Report" showActions={false} />
+      <div className="mb-6 flex items-center justify-end">
         <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
           <Download className="h-3.5 w-3.5" /> Export PDF
         </Button>

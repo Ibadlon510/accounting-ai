@@ -1,21 +1,38 @@
 "use client";
 
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { getProfitAndLoss } from "@/lib/mock/reports-data";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { comingSoon } from "@/lib/utils/toast-helpers";
 
+type Row = { label: string; amount: number; isHeader?: boolean; isTotal?: boolean; indent?: number };
+
 export default function ProfitAndLossPage() {
-  const { rows, netIncome } = getProfitAndLoss();
+  const [stats, setStats] = useState({ revenue: 0, expenses: 0 });
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) setStats({ revenue: data.sales?.totalRevenue ?? 0, expenses: data.purchases?.totalExpenses ?? 0 });
+      })
+      .catch(() => {});
+  }, []);
+
+  const netIncome = stats.revenue - stats.expenses;
+  const rows: Row[] = [
+    { label: "Revenue", amount: 0, isHeader: true },
+    { label: "Sales Revenue", amount: stats.revenue, indent: 1 },
+    { label: "Total Revenue", amount: stats.revenue, isTotal: true },
+    { label: "Expenses", amount: 0, isHeader: true },
+    { label: "Total Expenses", amount: stats.expenses, indent: 1 },
+    { label: "Total Expenses", amount: stats.expenses, isTotal: true },
+  ];
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Reports", href: "/reports" }, { label: "Profit & Loss" }]} />
-      <div className="flex items-center justify-between">
-        <PageHeader title="Profit & Loss Statement" showActions={false} />
+      <div className="mb-6 flex items-center justify-end">
         <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
           <Download className="h-3.5 w-3.5" /> Export PDF
         </Button>

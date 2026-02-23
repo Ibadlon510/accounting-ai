@@ -1,50 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockAccounts, getGeneralLedger } from "@/lib/accounting/mock-data";
+import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
+type Account = { id: string; code: string; name: string; accountType?: { name: string; category: string; normalBalance: string }; isActive: boolean };
+type LedgerEntry = { date: string; entryNumber: string; description: string; reference?: string; debit: number; credit: number; balance: number };
+
 export default function GeneralLedgerPage() {
   const [search, setSearch] = useState("");
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
-    null
-  );
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
-  // Only show accounts that have transactions
-  const accountsWithActivity = mockAccounts.filter((a) => {
-    const ledger = getGeneralLedger(a.id);
-    return ledger.length > 0;
-  });
+  useEffect(() => {
+    fetch("/api/accounting/chart-of-accounts")
+      .then((r) => r.ok ? r.json() : { accounts: [] })
+      .then((d) => setAccounts(d.accounts ?? []))
+      .catch(() => {});
+  }, []);
 
-  const filteredAccounts = accountsWithActivity.filter(
+  const filteredAccounts = accounts.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.code.includes(search)
   );
 
   const selectedAccount = selectedAccountId
-    ? mockAccounts.find((a) => a.id === selectedAccountId)
+    ? accounts.find((a) => a.id === selectedAccountId)
     : null;
 
-  const ledgerEntries = selectedAccountId
-    ? getGeneralLedger(selectedAccountId)
-    : [];
+  // No real ledger entries yet - will show empty state
+  const ledgerEntries: LedgerEntry[] = [];
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: "Workspaces", href: "/workspaces" },
-          { label: "Accounting", href: "/accounting" },
-          { label: "General Ledger" },
-        ]}
-      />
-      <PageHeader title="General Ledger" showActions={false} />
-
       <div className="grid grid-cols-12 gap-6">
         {/* Account list sidebar */}
         <div className="col-span-4">
@@ -62,8 +52,7 @@ export default function GeneralLedgerPage() {
             </div>
             <div className="max-h-[600px] overflow-y-auto">
               {filteredAccounts.map((account) => {
-                const ledger = getGeneralLedger(account.id);
-                const balance = ledger.length > 0 ? ledger[ledger.length - 1].balance : 0;
+                const balance = 0;
 
                 return (
                   <button

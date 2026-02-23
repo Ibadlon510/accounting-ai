@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockJournalEntries } from "@/lib/accounting/mock-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import {
   Search,
@@ -27,7 +24,7 @@ export default function JournalEntriesPage() {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [entries, setEntries] = useState(mockJournalEntries);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
 
   function handleCreate(data: { entryDate: string; description: string; reference: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
     const newEntry: JournalEntry = {
@@ -60,15 +57,6 @@ export default function JournalEntriesPage() {
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: "Workspaces", href: "/workspaces" },
-          { label: "Accounting", href: "/accounting" },
-          { label: "Journal Entries" },
-        ]}
-      />
-      <PageHeader title="Journal Entries" showActions={false} />
-
       {/* Toolbar */}
       <div className="mb-6 flex items-center justify-between gap-4">
         <div className="relative max-w-sm flex-1">

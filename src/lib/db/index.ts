@@ -11,11 +11,12 @@ function getDb() {
     if (!connectionString) {
       throw new Error("DATABASE_URL is not set. Add it to .env.local.");
     }
-    // Render internal URLs don't need SSL; external connections do.
+    // Local and Render-internal URLs don't need SSL; external connections do.
+    const isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
     const isInternal = connectionString.includes("@dpg-") || connectionString.includes(".render.com:5432");
     const client = postgres(connectionString, {
       max: 10,
-      ...(isInternal ? {} : { ssl: "require" }),
+      ...(isLocal || isInternal ? {} : { ssl: "require" }),
     });
     _db = drizzle(client, { schema });
   }

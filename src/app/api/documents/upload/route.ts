@@ -11,6 +11,14 @@ const ALLOWED_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+const BANK_STATEMENT_TYPES = [
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -46,7 +54,7 @@ export async function POST(request: Request) {
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
-      { error: "Invalid file type. Allowed: PDF, JPEG, PNG, WebP" },
+      { error: "Invalid file type. Allowed: PDF, JPEG, PNG, WebP, CSV, Excel (.xls, .xlsx)" },
       { status: 400 }
     );
   }
@@ -58,29 +66,51 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "document";
 
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      organizationId: orgId,
-      s3Key: "", // set after upload
-      status: "PENDING",
-    })
-    .returning({ id: documents.id });
+  const isBankStatement = BANK_STATEMENT_TYPES.includes(file.type);
+
+  let doc: { id: string } | undefined;
+  try {
+    [doc] = await db
+      .insert(documents)
+      .values({
+        organizationId: orgId,
+        s3Key: "", // set after upload
+        documentType: isBankStatement ? "bank_statement" : null,
+        status: "PENDING",
+      })
+      .returning({ id: documents.id });
+  } catch (err) {
+    console.error("[upload] DB insert failed:", err);
+    return NextResponse.json(
+      { error: "Failed to create document record" },
+      { status: 500 }
+    );
+  }
 
   if (!doc) {
     return NextResponse.json({ error: "Failed to create document record" }, { status: 500 });
   }
 
-  const s3Key = await uploadToTemp({
-    orgId,
-    documentId: doc.id,
-    fileName,
-    body: buffer,
-    contentType: file.type,
-  });
+  let s3Key: string | null;
+  try {
+    s3Key = await uploadToTemp({
+      orgId,
+      documentId: doc.id,
+      fileName,
+      body: buffer,
+      contentType: file.type,
+    });
+  } catch (err) {
+    console.error("[upload] S3 upload failed:", err);
+    await db.delete(documents).where(eq(documents.id, doc.id)).catch(() => {});
+    return NextResponse.json(
+      { error: "Failed to upload file to storage" },
+      { status: 500 }
+    );
+  }
 
   if (!s3Key) {
-    await db.delete(documents).where(eq(documents.id, doc.id));
+    await db.delete(documents).where(eq(documents.id, doc.id)).catch(() => {});
     return NextResponse.json(
       { error: "Failed to upload file to storage" },
       { status: 500 }

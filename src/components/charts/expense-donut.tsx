@@ -2,25 +2,24 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
-const data = [
-  { name: "Office Supplies", value: 12500, color: "#3B82F6" },
-  { name: "Travel", value: 8200, color: "#EF4444" },
-  { name: "Utilities", value: 5400, color: "#FBBF24" },
-  { name: "Rent", value: 15000, color: "#0F172A" },
-  { name: "Professional Services", value: 6800, color: "#22C55E" },
-  { name: "Other", value: 3100, color: "#A78BFA" },
+const emptyData = [
+  { name: "No data", value: 1, color: "#E8E8EA" },
 ];
 
-const total = data.reduce((s, d) => s + d.value, 0);
+interface ExpenseDonutProps {
+  data?: Array<{ name: string; value: number; color: string }>;
+}
 
-export function ExpenseDonut() {
+export function ExpenseDonut({ data }: ExpenseDonutProps) {
+  const chartData = data && data.length > 0 ? data : emptyData;
+  const total = chartData.reduce((s, d) => s + d.value, 0);
   return (
     <div className="flex items-center gap-6">
       <div className="h-[160px] w-[160px] shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
-              data={data}
+              data={chartData}
               cx="50%"
               cy="50%"
               innerRadius={50}
@@ -29,7 +28,7 @@ export function ExpenseDonut() {
               dataKey="value"
               stroke="none"
             >
-              {data.map((entry, i) => (
+              {chartData.map((entry, i) => (
                 <Cell key={i} fill={entry.color} />
               ))}
             </Pie>
@@ -47,15 +46,19 @@ export function ExpenseDonut() {
         </ResponsiveContainer>
       </div>
       <div className="flex-1 space-y-2">
-        {data.map((d) => (
-          <div key={d.name} className="flex items-center justify-between text-[12px]">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-              <span className="text-text-secondary">{d.name}</span>
+        {chartData[0]?.name === "No data" ? (
+          <p className="text-[12px] text-text-meta">No expense data yet</p>
+        ) : (
+          chartData.map((d) => (
+            <div key={d.name} className="flex items-center justify-between text-[12px]">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                <span className="text-text-secondary">{d.name}</span>
+              </div>
+              <span className="font-mono font-medium text-text-primary">{total > 0 ? Math.round((d.value / total) * 100) : 0}%</span>
             </div>
-            <span className="font-mono font-medium text-text-primary">{Math.round((d.value / total) * 100)}%</span>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

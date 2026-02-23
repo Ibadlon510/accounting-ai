@@ -1,22 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
-import { mockItems, getInventoryStats } from "@/lib/mock/inventory-data";
-import type { Item } from "@/lib/mock/inventory-data";
 import { formatNumber } from "@/lib/accounting/engine";
-import { Search, Plus, Package, AlertTriangle } from "lucide-react";
+import {
+  Search, Plus, Package, AlertTriangle, LayoutDashboard, Settings,
+  RefreshCw, Sparkles, X, Box, BarChart3,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddItemPanel } from "@/components/modals/add-item-panel";
-import { AiInsightBanner } from "@/components/ai/ai-insight-banner";
+import { DashboardPill } from "@/components/dashboard/dashboard-pill";
+import { InventoryDashboard } from "@/components/dashboard/variants/inventory-dashboard";
+import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
+import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import type { InventoryMiniStats } from "@/lib/dashboard/mini-stats-types";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch");
+  return res.json() as Promise<T>;
+}
+
+type Item = {
+  id: string;
+  name: string;
+  sku: string;
+  type: string;
+  unitOfMeasure: string;
+  salesPrice: number;
+  purchasePrice: number;
+  costPrice: number;
+  quantityOnHand: number;
+  reorderLevel: number;
+  taxCode: string | null;
+  trackInventory: boolean;
+  isActive: boolean;
+  totalValue?: number;
+};
 
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [items, setItems] = useState(mockItems);
-  const stats = getInventoryStats();
+  const [items, setItems] = useState<Item[]>([]);
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [dismissedInsight, setDismissedInsight] = useState(false);
+  const { isVisible } = useDashboardPillPreferences("inventory");
+
+  const { data: mini, isLoading: miniLoading, error: miniError, refetch: refetchMini } = useQuery({
+    queryKey: ["mini-stats", "inventory"],
+    queryFn: () => fetchJson<InventoryMiniStats>("/api/inventory/mini-stats"),
+  });
+
+  useEffect(() => {
+    fetch("/api/inventory")
+      .then((r) => r.ok ? r.json() : { items: [] })
+      .then((d) => setItems((d.items ?? []).map((i: Item) => ({ ...i, totalValue: i.quantityOnHand * i.costPrice }))))
+      .catch(() => {});
+  }, []);
+
+  const stats = {
+    totalItems: items.length,
+    totalProducts: items.filter((i) => i.type === "product").length,
+    totalValue: items.reduce((s, i) => s + (i.totalValue ?? 0), 0),
+    lowStock: items.filter((i) => i.type === "product" && i.trackInventory && i.quantityOnHand <= i.reorderLevel).length,
+  };
 
   function handleCreate(data: Omit<Item, "id" | "totalValue">) {
     const newItem: Item = {
@@ -31,41 +82,147 @@ export default function InventoryPage() {
     (i) => i.name.toLowerCase().includes(search.toLowerCase()) || i.sku.toLowerCase().includes(search.toLowerCase())
   );
 
+  const cards = [
+    {
+      title: "Total Items",
+      value: String(stats.totalItems),
+      icon: Box,
+      href: "#",
+      color: "text-text-primary",
+      accentBorder: "border-l-text-primary",
+      iconBg: "bg-text-primary/10",
+      subtitle: "In catalog",
+    },
+    {
+      title: "Products",
+      value: String(stats.totalProducts),
+      icon: Package,
+      href: "#",
+      color: "text-[var(--accent-ai)]",
+      accentBorder: "border-l-[var(--accent-ai)]",
+      iconBg: "bg-[var(--accent-ai)]/10",
+      subtitle: "Trackable",
+    },
+    {
+      title: "Inventory Value",
+      value: `AED ${formatNumber(stats.totalValue)}`,
+      icon: BarChart3,
+      href: "#",
+      color: "text-success",
+      accentBorder: "border-l-success",
+      iconBg: "bg-success/10",
+      subtitle: "Total",
+    },
+    {
+      title: "Low Stock",
+      value: String(stats.lowStock),
+      icon: AlertTriangle,
+      href: "#",
+      color: "text-error",
+      accentBorder: "border-l-error",
+      iconBg: "bg-error/10",
+      subtitle: "Reorder alerts",
+    },
+  ];
+
+  const insightText = stats.lowStock > 0
+    ? `${stats.lowStock} item(s) at or below reorder level — restock soon`
+    : stats.totalItems > 0
+    ? "All items are adequately stocked"
+    : "No inventory yet. Add items to track stock and value.";
+
   return (
     <>
       <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Inventory" }]} />
       <PageHeader title="Inventory" />
 
-      <AiInsightBanner
-        message="3 items are below reorder level — Dell Monitor, USB-C Hub, and Wireless Mouse."
-        detail="AI recommends creating purchase orders to replenish stock before the end of the month."
-      />
-
-      {/* Stats */}
-      <div className="grid grid-cols-12 gap-6 mb-8">
-        <div className="col-span-3 dashboard-card">
-          <p className="text-[13px] text-text-secondary">Total Items</p>
-          <p className="mt-1 text-[28px] font-bold text-text-primary">{stats.totalItems}</p>
-        </div>
-        <div className="col-span-3 dashboard-card">
-          <p className="text-[13px] text-text-secondary">Products</p>
-          <p className="mt-1 text-[28px] font-bold text-text-primary">{stats.totalProducts}</p>
-        </div>
-        <div className="col-span-3 dashboard-card">
-          <p className="text-[13px] text-text-secondary">Inventory Value</p>
-          <p className="mt-1 text-[28px] font-bold text-success">AED {formatNumber(stats.totalValue)}</p>
-        </div>
-        <div className="col-span-3 dashboard-card">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-error" />
-            <p className="text-[13px] text-text-secondary">Low Stock</p>
+      {!dismissedInsight && (
+        <div className="dashboard-card !py-3.5 !px-5 border-l-4 border-l-[var(--accent-ai)] flex items-center gap-3 mb-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-ai)]/10 shrink-0">
+            <Sparkles className="h-4 w-4 text-[var(--accent-ai)]" />
           </div>
-          <p className="mt-1 text-[28px] font-bold text-error">{stats.lowStock}</p>
+          <p className="flex-1 text-[13px] text-text-secondary">
+            <span className="font-semibold text-text-primary">AI Insight: </span>
+            {insightText}
+          </p>
+          <button
+            onClick={() => setDismissedInsight(true)}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-text-meta hover:bg-muted/50 transition-colors shrink-0"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.title} className={`dashboard-card border-l-[3px] ${card.accentBorder} transition-all`}>
+              <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.iconBg}`}>
+                <Icon className={`h-5 w-5 ${card.color}`} strokeWidth={1.8} />
+              </div>
+              <p className="mt-3 text-[12px] font-medium text-text-meta uppercase tracking-wide">{card.title}</p>
+              <p className={`mt-0.5 text-[28px] font-extrabold tracking-tight ${card.color}`}>{card.value}</p>
+              <p className="mt-1 text-[11px] text-text-meta">{card.subtitle}</p>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Toolbar */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between pb-4 mb-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
+              <LayoutDashboard className="h-4 w-4 text-text-secondary" />
+              <h2 className="text-[15px] font-semibold text-text-primary">Dashboard</h2>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCustomize(!showCustomize)}
+            className="rounded-xl text-[12px]"
+          >
+            <Settings className="h-3.5 w-3.5 mr-1.5" />
+            {showCustomize ? "Back" : "Customize"}
+          </Button>
+        </div>
+
+        {showCustomize ? (
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-border-subtle">
+              <h3 className="text-[14px] font-semibold text-text-primary">Customize widgets</h3>
+            </div>
+            <DashboardCustomizePanel variant="inventory" />
+          </div>
+        ) : (
+          <>
+            {miniLoading && <DashboardSkeleton />}
+            {miniError && (
+              <div className="dashboard-card border-l-4 border-l-destructive">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-text-primary">Failed to load dashboard</p>
+                    <p className="text-[12px] text-text-secondary mt-0.5">There was an error fetching inventory data. Please try again.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => refetchMini()} className="shrink-0 rounded-xl">
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!miniLoading && !miniError && mini && (
+              <InventoryDashboard mini={mini} isVisible={isVisible} layout="page" />
+            )}
+          </>
+        )}
+      </div>
+
       <div className="mb-6 flex items-center justify-between gap-4">
+        <DashboardPill />
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
@@ -76,7 +233,6 @@ export default function InventoryPage() {
         <AddItemPanel open={addOpen} onOpenChange={setAddOpen} onCreate={handleCreate} />
       </div>
 
-      {/* Items Table */}
       <div className="dashboard-card overflow-hidden !p-0">
         <div className="grid grid-cols-12 gap-3 border-b border-border-subtle bg-canvas/50 px-6 py-3 text-[12px] font-medium uppercase tracking-wide text-text-meta">
           <div className="col-span-1">SKU</div>
@@ -108,7 +264,7 @@ export default function InventoryPage() {
                 {item.type === "product" ? item.reorderLevel : "—"}
               </div>
               <div className="col-span-2 text-right font-mono font-medium text-text-primary">
-                {item.totalValue > 0 ? `AED ${formatNumber(item.totalValue)}` : "—"}
+                {(item.totalValue ?? 0) > 0 ? `AED ${formatNumber(item.totalValue ?? 0)}` : "—"}
               </div>
               <div className="col-span-1 text-right">
                 {isLow ? (

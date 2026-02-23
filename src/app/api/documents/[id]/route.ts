@@ -27,6 +27,7 @@ export async function GET(
   return NextResponse.json({
     id: doc.id,
     s3Key: doc.s3Key,
+    documentType: doc.documentType ?? null,
     status: doc.status,
     aiConfidence: doc.aiConfidence != null ? Number(doc.aiConfidence) : null,
     extractedData: doc.extractedData,

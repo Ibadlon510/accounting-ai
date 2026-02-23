@@ -1,28 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockCustomers, type Customer } from "@/lib/mock/sales-data";
+import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Search, Plus, Mail, Phone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
+import { ViewCustomerPanel } from "@/components/overlays/view-customer-panel";
+
+type Customer = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; creditLimit: number; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  useEffect(() => {
+    fetch("/api/sales/customers").then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+  }, []);
 
   const filtered = customers.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  function handleAddCustomer(data: { name: string; email: string; phone: string; taxNumber: string; city: string; country: string; creditLimit: number; paymentTermsDays: number }) {
+  function handleAddCustomer(data: { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; creditLimit: number; paymentTermsDays: number }) {
     const newCustomer: Customer = {
-      id: `cust-${Date.now()}`, ...data, currency: "AED", isActive: true, outstandingBalance: 0,
+      ...data, currency: "AED", isActive: true, outstandingBalance: 0,
     };
     setCustomers((prev) => [newCustomer, ...prev]);
   }
@@ -30,9 +35,11 @@ export default function CustomersPage() {
   return (
     <>
       <AddCustomerPanel open={addOpen} onOpenChange={setAddOpen} onAdd={handleAddCustomer} />
-      <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Sales", href: "/sales" }, { label: "Customers" }]} />
-      <PageHeader title="Customers" showActions={false} />
-
+      <ViewCustomerPanel
+        open={!!viewingId}
+        onOpenChange={(o) => !o && setViewingId(null)}
+        customer={customers.find((c) => c.id === viewingId) ?? null}
+      />
       <div className="mb-6 flex items-center justify-between gap-4">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
@@ -46,7 +53,10 @@ export default function CustomersPage() {
       <div className="grid grid-cols-12 gap-4">
         {filtered.map((customer) => (
           <div key={customer.id} className="col-span-4">
-            <div className="dashboard-card">
+            <button
+              onClick={() => setViewingId(customer.id)}
+              className="w-full text-left dashboard-card cursor-pointer transition-all hover:shadow-lg"
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-[15px] font-semibold text-text-primary">{customer.name}</h3>
@@ -76,7 +86,7 @@ export default function CustomersPage() {
                   <p className="text-[13px] font-medium text-text-primary">AED {formatNumber(customer.creditLimit)}</p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         ))}
       </div>

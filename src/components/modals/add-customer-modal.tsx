@@ -39,6 +39,7 @@ interface AddCustomerPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (customer: {
+    id: string;
     name: string;
     email: string;
     phone: string;
@@ -67,16 +68,43 @@ export function AddCustomerPanel({ open, onOpenChange, onAdd }: AddCustomerPanel
     setSendReminders(true);
   }
 
-  function handleSave() {
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
     if (!name.trim()) { showError("Company name is required"); return; }
-    onAdd({
-      name, email, phone, taxNumber, city, country,
-      creditLimit: Number(creditLimit),
-      paymentTermsDays: Number(paymentTermsDays),
-    });
-    showSuccess("Customer added", `${name} has been added to your customer list.`);
-    reset();
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sales/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, email, phone, taxNumber, city, country,
+          creditLimit: Number(creditLimit),
+          paymentTermsDays: Number(paymentTermsDays),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showError("Failed to create customer", err.error ?? "Please try again.");
+        return;
+      }
+      const data = await res.json();
+      const created = data.customer;
+      onAdd({
+        id: created.id,
+        name: created.name ?? name,
+        email, phone, taxNumber, city, country,
+        creditLimit: Number(creditLimit),
+        paymentTermsDays: Number(paymentTermsDays),
+      });
+      showSuccess("Customer added", `${name} has been added to your customer list.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      showError("Failed to create customer", "Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const initials = name

@@ -1,6 +1,6 @@
 # AI Accounting SaaS — Final Implementation Plan
 
-Complete implementation plan for a UAE-focused AI accounting SaaS: Finsera-inspired UI, Next.js full-stack on Vercel + Supabase, 9-sprint MVP (~20 weeks).
+Complete implementation plan for a UAE-focused AI accounting SaaS: Finsera-inspired UI, Next.js full-stack on Render, 9-sprint MVP (~20 weeks).
 
 ---
 
@@ -10,13 +10,13 @@ Complete implementation plan for a UAE-focused AI accounting SaaS: Finsera-inspi
 |----------|--------|
 | Stack | Next.js 14+ App Router, TypeScript |
 | UI | Tailwind CSS + shadcn/ui + Recharts + Framer Motion |
-| Database | PostgreSQL (Supabase) + Drizzle ORM |
-| Auth | Supabase Auth (email/password, MFA-ready) |
+| Database | PostgreSQL (Render) + Drizzle ORM |
+| Auth | NextAuth.js (email/password + Google OAuth, MFA-ready) |
 | State | Zustand + TanStack Query |
-| Files | Supabase Storage |
+| Files | AWS S3 |
 | PDF | @react-pdf/renderer |
 | Email | Resend |
-| Hosting | Vercel + Supabase |
+| Hosting | Render |
 | AI (entry) | OpenAI GPT-4o-mini (structured outputs) |
 | AI (classify) | Rule-based TS engine + per-org learning |
 | Multi-tenancy | Shared DB + Row-Level Security |
@@ -36,7 +36,7 @@ Complete implementation plan for a UAE-focused AI accounting SaaS: Finsera-inspi
 
 ### Multi-Tenancy
 - `organization_id` on every table
-- Supabase RLS policies enforce data isolation at DB level
+- Application-level tenant isolation via `organization_id` checks
 
 ### AI Hybrid
 - **Smart entry bar**: GPT-4o-mini parses natural language → structured transaction
@@ -177,14 +177,14 @@ Home, Accounting, Sales, Purchases, Banking, Reports, VAT, Settings
     /ui/        shadcn primitives (button, input, avatar, badge, dialog, etc.)
     /feedback/  toast, alert, confirmation-dialog
   /lib
-    /supabase/  client.ts, server.ts, middleware.ts
+    /auth/      config.ts, helpers.ts, index.ts
     /db/        schema.ts, index.ts, migrations/
     /accounting/ engine.ts, journal.ts, ledger.ts, trial-balance.ts
     /ai/        classifier.ts, nl-parser.ts, rules-engine.ts
     /vat/       calculator.ts, return-builder.ts
     utils.ts
   /hooks/       use-auth, use-organization, use-journal
-  /providers/   theme-provider, query-provider, supabase-provider
+  /providers/   theme-provider, query-provider, auth-session-provider
   /types/       accounting.ts, organization.ts, invoice.ts
 ```
 
@@ -196,8 +196,8 @@ Home, Accounting, Sales, Purchases, Banking, Reports, VAT, Settings
 1. `npx create-next-app` + install all deps
 2. Tailwind config with Finsera design tokens
 3. `globals.css` with CSS variables + gradient background
-4. Supabase client setup (browser + server + middleware)
-5. Foundation DB schema (organizations, users, user_roles, audit_logs) + RLS
+4. NextAuth.js setup (credentials + Google OAuth + middleware)
+5. Foundation DB schema (organizations, users, user_roles, audit_logs)
 6. Auth pages: `/login`, `/signup`, `/onboarding`
 7. `AppShell` with `TopNav` (frosted center nav + profile)
 8. `Breadcrumbs` + `PageHeader` + `PageContainer`
@@ -267,7 +267,7 @@ Home, Accounting, Sales, Purchases, Banking, Reports, VAT, Settings
 - Error handling + edge cases
 - Performance optimization
 - Security hardening
-- Deploy to Vercel
+- Deploy to Render
 
 ---
 

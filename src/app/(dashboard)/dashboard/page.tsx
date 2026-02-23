@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
@@ -8,12 +9,6 @@ import { ForecastBarChart } from "@/components/charts/forecast-bar-chart";
 import { ExpenseDonut } from "@/components/charts/expense-donut";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { Sparkles } from "lucide-react";
-import { AnomalyAlert } from "@/components/ai/anomaly-alert";
-import { getSalesStats } from "@/lib/mock/sales-data";
-import { getPurchaseStats } from "@/lib/mock/purchases-data";
-import { getInventoryStats } from "@/lib/mock/inventory-data";
-import { getBankingStats } from "@/lib/mock/banking-data";
-import { getVATSummary } from "@/lib/mock/vat-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import {
   FileText,
@@ -29,13 +24,35 @@ import {
   Zap,
 } from "lucide-react";
 
-export default function DashboardPage() {
-  const sales = getSalesStats();
-  const purchases = getPurchaseStats();
-  const inventory = getInventoryStats();
-  const banking = getBankingStats();
-  const vat = getVATSummary();
+interface DashboardStats {
+  sales: { totalRevenue: number; totalPaid: number; totalOutstanding: number; overdueAmount: number; invoiceCount: number; customerCount: number };
+  purchases: { totalExpenses: number; totalPaid: number; totalOutstanding: number; billCount: number; supplierCount: number };
+  banking: { totalBalance: number; unreconciled: number };
+  vat: { totalOutputVat: number; totalInputVat: number; netPayable: number };
+  inventory: { totalProducts: number; totalValue: number; lowStock: number };
+}
 
+const emptyStats: DashboardStats = {
+  sales: { totalRevenue: 0, totalPaid: 0, totalOutstanding: 0, overdueAmount: 0, invoiceCount: 0, customerCount: 0 },
+  purchases: { totalExpenses: 0, totalPaid: 0, totalOutstanding: 0, billCount: 0, supplierCount: 0 },
+  banking: { totalBalance: 0, unreconciled: 0 },
+  vat: { totalOutputVat: 0, totalInputVat: 0, netPayable: 0 },
+  inventory: { totalProducts: 0, totalValue: 0, lowStock: 0 },
+};
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => (r.ok ? r.json() : emptyStats))
+      .then((data) => setStats(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const { sales, purchases, inventory, banking, vat } = stats;
   const netIncome = sales.totalRevenue - purchases.totalExpenses;
   const grossMargin = sales.totalRevenue > 0 ? Math.round((netIncome / sales.totalRevenue) * 100) : 0;
 
@@ -50,12 +67,7 @@ export default function DashboardPage() {
 
       <PageHeader title="Accounting Command Center" />
 
-      <AnomalyAlert
-        anomalies={[
-          { id: "a1", merchant: "Gulf IT Solutions", amount: 47250, avgAmount: 15750, multiplier: 3, date: "Feb 14, 2026" },
-        ]}
-        className="mb-5"
-      />
+      {/* Anomaly alerts will be populated from real data in a future update */}
 
       {/* Row 1: Key metrics */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-12 md:gap-5">

@@ -5,9 +5,6 @@ import Link from "next/link";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { formatNumber } from "@/lib/accounting/engine";
-import { getSalesStats } from "@/lib/mock/sales-data";
-import { getPurchaseStats } from "@/lib/mock/purchases-data";
-import { getBankingStats } from "@/lib/mock/banking-data";
 import {
   Calendar,
   ArrowRight,
@@ -46,6 +43,7 @@ export default function WorkspacesPage() {
   const setCurrentOrg = useSetCurrentOrg();
   const [organizations, setOrganizations] = useState<OrgItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ totalRevenue: 0, totalExpenses: 0, totalBalance: 0 });
 
   useEffect(() => {
     fetch("/api/org/list")
@@ -55,11 +53,20 @@ export default function WorkspacesPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
 
-  const sales = getSalesStats();
-  const purchases = getPurchaseStats();
-  const banking = getBankingStats();
+    fetch("/api/dashboard/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setStats({
+            totalRevenue: data.sales?.totalRevenue ?? 0,
+            totalExpenses: data.purchases?.totalExpenses ?? 0,
+            totalBalance: data.banking?.totalBalance ?? 0,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleOrgClick = async (org: OrgItem) => {
     if (org.id === currentOrgId) return;
@@ -140,15 +147,15 @@ export default function WorkspacesPage() {
                       <div className="mt-3 flex items-center gap-6 border-t border-border-subtle pt-3">
                         <div>
                           <p className="text-[10px] font-medium uppercase tracking-wider text-text-meta">Revenue</p>
-                          <p className="text-[15px] font-bold text-success">AED {formatNumber(sales.totalRevenue)}</p>
+                          <p className="text-[15px] font-bold text-success">AED {formatNumber(stats.totalRevenue)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] font-medium uppercase tracking-wider text-text-meta">Expenses</p>
-                          <p className="text-[15px] font-bold text-error">AED {formatNumber(purchases.totalExpenses)}</p>
+                          <p className="text-[15px] font-bold text-error">AED {formatNumber(stats.totalExpenses)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] font-medium uppercase tracking-wider text-text-meta">Bank Balance</p>
-                          <p className="text-[15px] font-bold text-text-primary">AED {formatNumber(banking.totalBalance)}</p>
+                          <p className="text-[15px] font-bold text-text-primary">AED {formatNumber(stats.totalBalance)}</p>
                         </div>
                       </div>
                     )}

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Building2,
@@ -232,19 +233,57 @@ function OrganizationSettings() {
   );
 }
 
+const SEED_MODULES = [
+  { id: "sales" as const, label: "Sales", desc: "Customers, invoices, payments" },
+  { id: "purchases" as const, label: "Purchases", desc: "Suppliers, bills" },
+  { id: "banking" as const, label: "Banking", desc: "Bank accounts, transactions" },
+  { id: "inventory" as const, label: "Inventory", desc: "Items, movements" },
+  { id: "accounting" as const, label: "Accounting", desc: "Journal entries" },
+  { id: "vat" as const, label: "VAT", desc: "VAT returns" },
+];
+
 function DatabaseSettings() {
   const [seeding, setSeeding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [selectedModules, setSelectedModules] = useState<Set<string>>(
+    () => new Set(SEED_MODULES.map((m) => m.id))
+  );
+
+  function toggleModule(id: string) {
+    setSelectedModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllModules() {
+    setSelectedModules(new Set(SEED_MODULES.map((m) => m.id)));
+  }
+
+  function deselectAllModules() {
+    setSelectedModules(new Set());
+  }
 
   async function handleSeed() {
+    const modules = [...selectedModules];
+    if (modules.length === 0) {
+      showError("Select at least one module", "Choose which data to seed.");
+      return;
+    }
     setConfirmSeed(false);
     setSeeding(true);
     try {
-      const res = await fetch("/api/org/demo-data", { method: "POST" });
+      const res = await fetch("/api/org/demo-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modules }),
+      });
       if (res.ok) {
-        showSuccess("Demo data loaded", "Sample customers, invoices, journal entries, and more have been added.");
+        showSuccess("Demo data loaded", "Selected modules have been seeded.");
       } else {
         const data = await res.json().catch(() => ({}));
         showError("Failed to load demo data", data.error ?? "Please try again.");
@@ -289,24 +328,59 @@ function DatabaseSettings() {
               {seeding ? "Loading..." : "Load Demo Data"}
             </Button>
           ) : (
-            <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface/50 px-4 py-3">
-              <p className="flex-1 text-[13px] text-text-secondary">
-                This will add sample data to your organization. Existing data will not be overwritten.
+            <div className="space-y-4 rounded-xl border border-border-subtle bg-surface/50 px-4 py-4">
+              <p className="text-[13px] text-text-secondary">
+                Choose which modules to seed. Foundation (chart of accounts, periods, tax codes) is always included. Existing data will not be overwritten.
               </p>
-              <Button
-                onClick={handleSeed}
-                disabled={seeding}
-                className="h-9 rounded-xl bg-text-primary px-5 text-[12px] font-semibold text-white hover:bg-text-primary/90"
-              >
-                {seeding ? "Loading..." : "Confirm"}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setConfirmSeed(false)}
-                className="h-9 rounded-xl text-[12px] font-medium text-text-secondary"
-              >
-                Cancel
-              </Button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {SEED_MODULES.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-border-subtle px-3 py-2 hover:bg-surface/50"
+                  >
+                    <Checkbox
+                      checked={selectedModules.has(m.id)}
+                      onCheckedChange={() => toggleModule(m.id)}
+                    />
+                    <div>
+                      <span className="text-[13px] font-medium text-text-primary">{m.label}</span>
+                      <span className="ml-1.5 text-[12px] text-text-secondary">— {m.desc}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={selectAllModules}
+                  className="text-[12px] font-medium text-text-secondary underline hover:text-text-primary"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={deselectAllModules}
+                  className="text-[12px] font-medium text-text-secondary underline hover:text-text-primary"
+                >
+                  Deselect all
+                </button>
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    onClick={handleSeed}
+                    disabled={seeding || selectedModules.size === 0}
+                    className="h-9 rounded-xl bg-text-primary px-5 text-[12px] font-semibold text-white hover:bg-text-primary/90"
+                  >
+                    {seeding ? "Loading..." : "Confirm"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmSeed(false)}
+                    className="h-9 rounded-xl text-[12px] font-medium text-text-secondary"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockPeriods, mockFiscalYear } from "@/lib/accounting/mock-data";
+import { useState, useEffect } from "react";
 import { Lock, Unlock, CheckCircle2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+type Period = { id: string; name: string; startDate: string; endDate: string; status: "open" | "closed" | "locked" };
+type FiscalYear = { id: string; name: string; startDate: string; endDate: string; isClosed: boolean };
 
 const statusConfig: Record<string, { icon: typeof Lock; color: string; bg: string }> = {
   open: { icon: Unlock, color: "text-success", bg: "bg-success-light" },
@@ -13,8 +13,21 @@ const statusConfig: Record<string, { icon: typeof Lock; color: string; bg: strin
   locked: { icon: Lock, color: "text-error", bg: "bg-error-light" },
 };
 
+const defaultFY: FiscalYear = { id: "", name: "No Fiscal Year", startDate: "—", endDate: "—", isClosed: false };
+
 export default function PeriodsPage() {
-  const [periods, setPeriods] = useState(mockPeriods);
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [fiscalYear, setFiscalYear] = useState<FiscalYear>(defaultFY);
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then(() => {
+        // Periods/fiscal years would come from a dedicated API
+        // For now show empty state
+      })
+      .catch(() => {});
+  }, []);
 
   function togglePeriodStatus(periodId: string) {
     setPeriods((prev) =>
@@ -29,15 +42,6 @@ export default function PeriodsPage() {
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: "Workspaces", href: "/workspaces" },
-          { label: "Accounting", href: "/accounting" },
-          { label: "Periods" },
-        ]}
-      />
-      <PageHeader title="Accounting Periods" showActions={false} />
-
       {/* Fiscal Year info */}
       <div className="mb-6 dashboard-card flex items-center gap-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-text-primary/5">
@@ -45,21 +49,21 @@ export default function PeriodsPage() {
         </div>
         <div>
           <h3 className="text-[16px] font-semibold text-text-primary">
-            {mockFiscalYear.name}
+            {fiscalYear.name}
           </h3>
           <p className="text-[13px] text-text-secondary">
-            {mockFiscalYear.startDate} — {mockFiscalYear.endDate}
+            {fiscalYear.startDate} — {fiscalYear.endDate}
           </p>
         </div>
         <div className="ml-auto">
           <span
             className={`rounded-full px-3 py-1 text-[12px] font-medium ${
-              mockFiscalYear.isClosed
+              fiscalYear.isClosed
                 ? "bg-error-light text-error"
                 : "bg-success-light text-success"
             }`}
           >
-            {mockFiscalYear.isClosed ? "Closed" : "Active"}
+            {fiscalYear.isClosed ? "Closed" : "Active"}
           </span>
         </div>
       </div>

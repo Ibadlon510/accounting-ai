@@ -224,10 +224,12 @@ function ExtractionResultCard({
 function UploadProgress({
   fileState,
   onDismiss,
+  onRetry,
   compact,
 }: {
   fileState: FileUploadState;
   onDismiss: () => void;
+  onRetry?: () => void;
   compact?: boolean;
 }) {
   if (fileState.status === "done") {
@@ -238,6 +240,7 @@ function UploadProgress({
   const isExtracting = fileState.status === "extracting";
   const isError = fileState.status === "error";
   const stepIndex = isUploading ? 0 : isExtracting ? 1 : isError ? -1 : 2;
+  const canRetry = isError && !!fileState.documentId;
 
   return (
     <div className="mt-3">
@@ -257,12 +260,22 @@ function UploadProgress({
           </p>
         </div>
         {isError && (
-          <button
-            onClick={onDismiss}
-            className="flex h-6 w-6 items-center justify-center rounded-lg text-white/40 hover:text-white/70"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {canRetry && (
+              <button
+                onClick={onRetry}
+                className="rounded-lg bg-white/10 px-2 py-1 text-[11px] font-medium text-white/70 hover:bg-white/20 hover:text-white"
+              >
+                Retry
+              </button>
+            )}
+            <button
+              onClick={onDismiss}
+              className="flex h-6 w-6 items-center justify-center rounded-lg text-white/40 hover:text-white/70"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -468,6 +481,28 @@ export function AssistantPanel() {
           <UploadProgress
             fileState={fileState}
             onDismiss={() => setFileState(null)}
+            onRetry={fileState.documentId ? async () => {
+              const docId = fileState.documentId!;
+              setFileState({ ...fileState, status: "extracting", error: undefined });
+              try {
+                const res = await fetch(`/api/documents/${docId}/process`, { method: "POST" });
+                if (!res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  setFileState({ ...fileState, status: "error", error: data.error ?? "Retry failed." });
+                  return;
+                }
+                const result = await res.json();
+                setFileState({
+                  fileName: fileState.fileName,
+                  status: "done",
+                  documentId: docId,
+                  extractedData: result.extractedData,
+                  confidence: result.confidence,
+                });
+              } catch {
+                setFileState({ ...fileState, status: "error", error: "Network error on retry." });
+              }
+            } : undefined}
           />
         )}
 

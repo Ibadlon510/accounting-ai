@@ -1,8 +1,5 @@
 "use client";
 
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { getTrialBalance } from "@/lib/accounting/mock-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -15,20 +12,14 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function TrialBalancePage() {
-  const { rows, totalDebit, totalCredit } = getTrialBalance();
+  // No real journal entry data yet - show empty state
+  const rows: { accountCode: string; accountName: string; accountCategory: string; debit: number; credit: number }[] = [];
+  const totalDebit = 0;
+  const totalCredit = 0;
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: "Workspaces", href: "/workspaces" },
-          { label: "Accounting", href: "/accounting" },
-          { label: "Trial Balance" },
-        ]}
-      />
-      <PageHeader title="Trial Balance" showActions={false} />
-
       {/* Balance status banner */}
       <div
         className={`mb-6 flex items-center gap-3 rounded-2xl px-5 py-3 ${

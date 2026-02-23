@@ -1,6 +1,17 @@
 import { z } from "zod";
 
+/** Document types for routing verification workflow */
+export const DOCUMENT_TYPES = [
+  "purchase_invoice",
+  "sales_invoice",
+  "receipt",
+  "credit_note",
+  "bank_statement",
+] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
 export const InvoiceExtractionSchema = z.object({
+  document_type: z.enum(DOCUMENT_TYPES).default("purchase_invoice"),
   merchant: z.object({
     name: z.string(),
     trn: z.string().nullable().optional(),

@@ -98,6 +98,7 @@ DOCUMENT_VAULT_BUCKET=your-bucket-name
 Optional:
 
 - `SEED_ORG_ID` — When running the seed script, target this organization ID instead of the first org or a new "Demo 2025" org.
+- `SEED_MODULES` — Limit which modules to seed (e.g. `sales,purchases,banking`). Omit to seed all. See [SEED.md](SEED.md).
 
 ---
 

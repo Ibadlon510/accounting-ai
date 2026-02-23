@@ -19,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber, validateJournalEntry, calculateLineTotals } from "@/lib/accounting/engine";
-import { mockAccounts } from "@/lib/accounting/mock-data";
 import { Plus, Trash2, Info, CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
 
@@ -71,9 +70,7 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
     }
   }, [open]);
 
-  const activeAccounts = accounts.length > 0
-    ? accounts
-    : mockAccounts.map((a) => ({ id: a.id, code: a.code, name: a.name }));
+  const activeAccounts = accounts;
 
   function updateLine(index: number, field: keyof JournalLine, value: string | number) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, [field]: value } : line)));

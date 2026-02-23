@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
 import { Search, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -70,15 +68,6 @@ export default function ChartOfAccountsPage() {
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: "Workspaces", href: "/workspaces" },
-          { label: "Accounting", href: "/accounting" },
-          { label: "Chart of Accounts" },
-        ]}
-      />
-      <PageHeader title="Chart of Accounts" showActions={false} />
-
       {/* Toolbar */}
       <div className="mb-6 flex items-center justify-between gap-4">
         <div className="relative max-w-sm flex-1">

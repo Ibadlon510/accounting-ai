@@ -1,13 +1,12 @@
 "use client";
 
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { getBalanceSheet } from "@/lib/mock/reports-data";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Download, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { comingSoon } from "@/lib/utils/toast-helpers";
-import type { ReportRow } from "@/lib/mock/reports-data";
+
+type ReportRow = { label: string; amount: number; isHeader?: boolean; isTotal?: boolean; indent?: number };
 
 function ReportSection({ title, rows }: { title: string; rows: ReportRow[] }) {
   return (
@@ -35,14 +34,45 @@ function ReportSection({ title, rows }: { title: string; rows: ReportRow[] }) {
 }
 
 export default function BalanceSheetPage() {
-  const { assets, liabilities, equity, totalAssets, totalLiabilitiesEquity } = getBalanceSheet();
+  const [stats, setStats] = useState({ bankBalance: 0, receivables: 0, payables: 0 });
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) setStats({
+          bankBalance: data.banking?.totalBalance ?? 0,
+          receivables: data.sales?.totalOutstanding ?? 0,
+          payables: data.purchases?.totalOutstanding ?? 0,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const totalAssets = stats.bankBalance + stats.receivables;
+  const totalLiabilitiesEquity = stats.payables + (totalAssets - stats.payables);
   const isBalanced = Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01;
+
+  const assets: ReportRow[] = [
+    { label: "Current Assets", amount: 0, isHeader: true },
+    { label: "Cash & Bank", amount: stats.bankBalance, indent: 1 },
+    { label: "Accounts Receivable", amount: stats.receivables, indent: 1 },
+    { label: "Total Assets", amount: totalAssets, isTotal: true },
+  ];
+  const liabilities: ReportRow[] = [
+    { label: "Current Liabilities", amount: 0, isHeader: true },
+    { label: "Accounts Payable", amount: stats.payables, indent: 1 },
+    { label: "Total Liabilities", amount: stats.payables, isTotal: true },
+  ];
+  const equity: ReportRow[] = [
+    { label: "Owner's Equity", amount: 0, isHeader: true },
+    { label: "Retained Earnings", amount: totalAssets - stats.payables, indent: 1 },
+    { label: "Total Equity", amount: totalAssets - stats.payables, isTotal: true },
+  ];
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Reports", href: "/reports" }, { label: "Balance Sheet" }]} />
-      <div className="flex items-center justify-between">
-        <PageHeader title="Balance Sheet" showActions={false} />
+      <div className="mb-6 flex items-center justify-end">
         <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
           <Download className="h-3.5 w-3.5" /> Export PDF
         </Button>

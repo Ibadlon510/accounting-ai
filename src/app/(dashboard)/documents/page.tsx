@@ -2,13 +2,29 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { FileText, CheckCircle, Clock, AlertCircle, Sparkles } from "lucide-react";
+import {
+  FileText, CheckCircle, Clock, AlertCircle, Sparkles, LayoutDashboard, Settings,
+  RefreshCw, X,
+} from "lucide-react";
 import { showError, showSuccess } from "@/lib/utils/toast-helpers";
 import { SmartDropZone } from "@/components/workspace/smart-drop-zone";
 import { BatchReport, type BatchResult } from "@/components/ai/batch-report";
+import { DashboardPill } from "@/components/dashboard/dashboard-pill";
+import { DocumentsDashboard } from "@/components/dashboard/variants/documents-dashboard";
+import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
+import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import type { DocumentsMiniStats } from "@/lib/dashboard/mini-stats-types";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch");
+  return res.json() as Promise<T>;
+}
 
 type DocItem = {
   id: string;
@@ -35,6 +51,14 @@ export default function DocumentsPage() {
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [dismissedInsight, setDismissedInsight] = useState(false);
+  const { isVisible } = useDashboardPillPreferences("documents");
+
+  const { data: mini, isLoading: miniLoading, error: miniError, refetch: refetchMini } = useQuery({
+    queryKey: ["mini-stats", "documents"],
+    queryFn: () => fetchJson<DocumentsMiniStats>("/api/documents/mini-stats"),
+  });
 
   function loadDocs() {
     fetch("/api/documents")
@@ -68,36 +92,187 @@ export default function DocumentsPage() {
     { id: "verified", label: "Verified", count: counts.verified },
   ];
 
+  const cardCounts = {
+    pending: mini?.pendingCount ?? counts.pending,
+    verified: mini?.verifiedCount ?? counts.verified,
+    flagged: mini?.flaggedCount ?? counts.flagged,
+    total: mini?.totalCount ?? counts.all,
+  };
+
+  const cards = [
+    {
+      title: "Pending",
+      value: String(cardCounts.pending),
+      icon: Clock,
+      href: "#",
+      onClick: () => setActiveTab("pending"),
+      color: "text-accent-yellow",
+      accentBorder: "border-l-accent-yellow",
+      iconBg: "bg-accent-yellow/10",
+      subtitle: "Awaiting processing",
+    },
+    {
+      title: "Verified",
+      value: String(cardCounts.verified),
+      icon: CheckCircle,
+      href: "#",
+      onClick: () => setActiveTab("verified"),
+      color: "text-success",
+      accentBorder: "border-l-success",
+      iconBg: "bg-success/10",
+      subtitle: "AI-extracted",
+    },
+    {
+      title: "Flagged",
+      value: String(cardCounts.flagged),
+      icon: AlertCircle,
+      href: "#",
+      onClick: () => setActiveTab("flagged"),
+      color: "text-error",
+      accentBorder: "border-l-error",
+      iconBg: "bg-error/10",
+      subtitle: "Needs review",
+    },
+    {
+      title: "Total",
+      value: String(cardCounts.total),
+      icon: FileText,
+      href: "#",
+      onClick: () => setActiveTab("all"),
+      color: "text-[var(--accent-ai)]",
+      accentBorder: "border-l-[var(--accent-ai)]",
+      iconBg: "bg-[var(--accent-ai)]/10",
+      subtitle: "Documents",
+    },
+  ];
+
+  const insightText = cardCounts.pending > 0
+    ? `${cardCounts.pending} document(s) pending AI extraction — process to verify`
+    : cardCounts.flagged > 0
+    ? `${cardCounts.flagged} document(s) flagged for review`
+    : "All documents verified. Upload more to continue.";
+
   return (
     <>
       <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Documents" }]} />
       <PageHeader title="Document Vault" />
 
-      {/* Smart Drop Zone */}
-      <SmartDropZone onUploaded={() => loadDocs()} className="mb-6" />
+      <SmartDropZone onUploaded={() => { loadDocs(); refetchMini(); }} className="mb-6" />
 
-      {/* Filter Tabs + Batch Actions */}
+      {!dismissedInsight && (
+        <div className="dashboard-card !py-3.5 !px-5 border-l-4 border-l-[var(--accent-ai)] flex items-center gap-3 mb-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-ai)]/10 shrink-0">
+            <Sparkles className="h-4 w-4 text-[var(--accent-ai)]" />
+          </div>
+          <p className="flex-1 text-[13px] text-text-secondary">
+            <span className="font-semibold text-text-primary">AI Insight: </span>
+            {insightText}
+          </p>
+          <button
+            onClick={() => setDismissedInsight(true)}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-text-meta hover:bg-muted/50 transition-colors shrink-0"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <button
+              key={card.title}
+              type="button"
+              onClick={card.onClick}
+              className="text-left"
+            >
+              <div className={`dashboard-card group cursor-pointer border-l-[3px] ${card.accentBorder} transition-all hover:shadow-lg hover:-translate-y-0.5 w-full`}>
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-text-primary/5">
+                  <Icon className={`h-5 w-5 ${card.color}`} strokeWidth={1.8} />
+                </div>
+                <p className="mt-3 text-[12px] font-medium text-text-meta uppercase tracking-wide">{card.title}</p>
+                <p className={`mt-0.5 text-[28px] font-extrabold tracking-tight ${card.color}`}>{card.value}</p>
+                <p className="mt-1 text-[11px] text-text-meta">{card.subtitle}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-center justify-between pb-4 mb-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
+              <LayoutDashboard className="h-4 w-4 text-text-secondary" />
+              <h2 className="text-[15px] font-semibold text-text-primary">Dashboard</h2>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCustomize(!showCustomize)}
+            className="rounded-xl text-[12px]"
+          >
+            <Settings className="h-3.5 w-3.5 mr-1.5" />
+            {showCustomize ? "Back" : "Customize"}
+          </Button>
+        </div>
+
+        {showCustomize ? (
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-border-subtle">
+              <h3 className="text-[14px] font-semibold text-text-primary">Customize widgets</h3>
+            </div>
+            <DashboardCustomizePanel variant="documents" />
+          </div>
+        ) : (
+          <>
+            {miniLoading && <DashboardSkeleton />}
+            {miniError && (
+              <div className="dashboard-card border-l-4 border-l-destructive">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-text-primary">Failed to load dashboard</p>
+                    <p className="text-[12px] text-text-secondary mt-0.5">There was an error fetching document stats. Please try again.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => refetchMini()} className="shrink-0 rounded-xl">
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!miniLoading && !miniError && mini && (
+              <DocumentsDashboard mini={mini} isVisible={isVisible} layout="page" />
+            )}
+          </>
+        )}
+      </div>
+
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-medium transition-all ${
-              activeTab === tab.id
-                ? "bg-surface text-text-primary shadow-sm"
-                : "text-text-secondary hover:bg-black/5 hover:text-text-primary"
-            }`}
-            style={activeTab === tab.id ? { boxShadow: "var(--shadow-card)" } : undefined}
-          >
-            {tab.label}
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-              activeTab === tab.id ? "bg-text-primary/10 text-text-primary" : "bg-black/5 text-text-meta"
-            }`}>
-              {tab.count}
-            </span>
-          </button>
-        ))}
+          <DashboardPill />
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-medium transition-all ${
+                activeTab === tab.id
+                  ? "bg-surface text-text-primary shadow-sm"
+                  : "text-text-secondary hover:bg-black/5 hover:text-text-primary"
+              }`}
+              style={activeTab === tab.id ? { boxShadow: "var(--shadow-card)" } : undefined}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                activeTab === tab.id ? "bg-text-primary/10 text-text-primary" : "bg-black/5 text-text-meta"
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
         </div>
         {counts.pending > 0 && (
           <Button
@@ -122,6 +297,7 @@ export default function DocumentsPage() {
               }
               setBatchProcessing(false);
               loadDocs();
+              refetchMini();
               if (processed > 0) {
                 setBatchResult({
                   total: pending.length,
@@ -201,7 +377,7 @@ export default function DocumentsPage() {
                   {doc.aiConfidence != null ? `${Math.round(doc.aiConfidence * 100)}%` : "—"}
                 </div>
                 <div className="col-span-2 text-right flex gap-1 justify-end">
-                  {doc.status === "PENDING" && (
+                  {(doc.status === "PENDING" || doc.status === "PROCESSING_FAILED") && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -217,13 +393,14 @@ export default function DocumentsPage() {
                           } else {
                             const data = await res.json().catch(() => ({}));
                             showError("Processing failed", data.error ?? "Please try again.");
+                            loadDocs();
                           }
                         } finally {
                           setProcessingId(null);
                         }
                       }}
                     >
-                      {processingId === doc.id ? "Processing..." : "Process"}
+                      {processingId === doc.id ? "Processing..." : doc.status === "PROCESSING_FAILED" ? "Retry" : "Process"}
                     </Button>
                   )}
                   {doc.status === "PENDING" || doc.status === "FLAGGED" || doc.status === "PROCESSING_FAILED" ? (
@@ -244,4 +421,3 @@ export default function DocumentsPage() {
     </>
   );
 }
-

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from "react";
 import { cn } from "@/lib/utils";
-import { CloudUpload, FileText, X, Loader2, Camera } from "lucide-react";
+import { CloudUpload, FileText, X, Loader2, Camera, RotateCw } from "lucide-react";
 import { showError } from "@/lib/utils/toast-helpers";
 
 const LazyCameraCapture = lazy(() =>
@@ -14,6 +14,9 @@ const ALLOWED_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -48,7 +51,7 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
 
       for (const file of incoming) {
         if (!ALLOWED_TYPES.includes(file.type)) {
-          showError("Invalid file", `${file.name}: Only PDF, JPEG, PNG, WebP allowed.`);
+          showError("Invalid file", `${file.name}: Only PDF, JPEG, PNG, WebP, CSV, Excel allowed.`);
           continue;
         }
         if (file.size > MAX_SIZE) {
@@ -137,6 +140,51 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
     [handleFiles]
   );
 
+  const retryFile = useCallback(
+    async (index: number) => {
+      const entry = files[index];
+      if (!entry || entry.status !== "error") return;
+
+      setFiles((prev) =>
+        prev.map((f, i) => (i === index ? { ...f, status: "uploading" as const, error: undefined, progress: 0 } : f))
+      );
+
+      const formData = new FormData();
+      formData.set("file", entry.file);
+
+      try {
+        const res = await fetch("/api/documents/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setFiles((prev) =>
+            prev.map((f, i) =>
+              i === index ? { ...f, status: "done", progress: 100, documentId: data.documentId } : f
+            )
+          );
+          onUploaded?.(data.documentId);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setFiles((prev) =>
+            prev.map((f, i) =>
+              i === index ? { ...f, status: "error", error: data.error ?? "Upload failed" } : f
+            )
+          );
+        }
+      } catch {
+        setFiles((prev) =>
+          prev.map((f, i) =>
+            i === index ? { ...f, status: "error", error: "Network error" } : f
+          )
+        );
+      }
+    },
+    [files, onUploaded]
+  );
+
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
@@ -162,7 +210,7 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.csv,.xls,.xlsx"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -185,7 +233,7 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
               {isDragging ? "Drop files here" : "Drop invoices, receipts, or credit notes here"}
             </p>
             <p className="mt-1 text-[12px] text-text-meta">
-              PDF, JPEG, PNG, WebP — up to 10 MB each
+              PDF, JPEG, PNG, WebP, CSV, Excel — up to 10 MB each
             </p>
             {isMobile && (
               <button
@@ -227,6 +275,18 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
                 </div>
                 {f.status === "uploading" && (
                   <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-ai)]" />
+                )}
+                {f.status === "error" && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      retryFile(i);
+                    }}
+                    className="flex h-6 w-6 items-center justify-center rounded-lg text-error hover:bg-error/10"
+                    title="Retry upload"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                  </button>
                 )}
                 {f.status === "done" && (
                   <span className="text-[11px] font-medium text-success">Uploaded</span>

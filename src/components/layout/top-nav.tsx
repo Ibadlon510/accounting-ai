@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   Home,
@@ -50,6 +51,9 @@ const navItems = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const userName = session?.user?.name || "User";
+  const userInitials = userName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 
   async function handleSignOut() {
     await signOut({ callbackUrl: "/login" });
@@ -121,7 +125,7 @@ export function TopNav() {
         <TokenMeter />
         <div className="mr-1 text-right">
           <p className="text-[13px] font-semibold leading-tight text-text-primary">
-            Demo User
+            {userName}
           </p>
           <p className="text-[11px] leading-tight text-text-meta">
             Admin
@@ -133,7 +137,7 @@ export function TopNav() {
               <Avatar className="h-8 w-8 border border-border-subtle cursor-pointer">
                 <AvatarImage src="" />
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-[11px] font-semibold text-white">
-                  DU
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
             </button>

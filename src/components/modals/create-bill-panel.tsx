@@ -21,7 +21,9 @@ import { formatNumber } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
 import { AttachDocumentZone } from "@/components/workspace/attach-document-zone";
-import type { Supplier, BillLine } from "@/lib/mock/purchases-data";
+import { ProductSelect, getProductPrice } from "@/components/documents/product-select";
+type Supplier = { id: string; name: string; email: string; phone: string; isActive: boolean };
+type BillLine = { id: string; productId: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 
 interface CreateBillPanelProps {
   open: boolean;
@@ -41,7 +43,7 @@ interface CreateBillPanelProps {
 }
 
 function emptyLine(): BillLine {
-  return { id: `new-${Date.now()}-${Math.random()}`, description: "", quantity: 1, unitPrice: 0, amount: 0, taxRate: 5, taxAmount: 0 };
+  return { id: `new-${Date.now()}-${Math.random()}`, productId: "", description: "", quantity: 1, unitPrice: 0, amount: 0, taxRate: 5, taxAmount: 0 };
 }
 
 export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: CreateBillPanelProps) {
@@ -70,6 +72,21 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
     );
   }
 
+  function updateLineFields(index: number, fields: Partial<BillLine>) {
+    setLines((prev) =>
+      prev.map((line, i) => {
+        if (i !== index) return line;
+        const updated = { ...line, ...fields };
+        const qty = Number(updated.quantity) || 0;
+        const price = Number(updated.unitPrice) || 0;
+        const rate = Number(updated.taxRate) || 0;
+        updated.amount = Math.round(qty * price * 100) / 100;
+        updated.taxAmount = Math.round(updated.amount * rate / 100 * 100) / 100;
+        return updated;
+      })
+    );
+  }
+
   function addLine() { setLines((prev) => [...prev, emptyLine()]); }
   function removeLine(index: number) { if (lines.length > 1) setLines((prev) => prev.filter((_, i) => i !== index)); }
 
@@ -87,7 +104,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
   function handleSave() {
     if (!supplierId) { showError("Select a supplier"); return; }
     if (!billNumber.trim()) { showError("Bill number is required"); return; }
-    if (lines.some((l) => !l.description.trim())) { showError("All lines need a description"); return; }
+    if (lines.some((l) => !l.productId)) { showError("Select a product for each line"); return; }
     if (subtotal <= 0) { showError("Bill total must be greater than zero"); return; }
     const supplier = suppliers.find((s) => s.id === supplierId);
     onCreate({
@@ -145,24 +162,45 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                 <div className="col-span-1"></div>
               </div>
               {lines.map((line, i) => (
-                <div key={line.id} className="grid grid-cols-12 items-center gap-2 border-t border-border-subtle px-4 py-2">
-                  <div className="col-span-5">
-                    <Input value={line.description} onChange={(e) => updateLine(i, "description", e.target.value)} placeholder="Expense description" className="h-8 rounded-lg border-border-subtle text-[13px]" />
+                <div key={line.id} className="grid grid-cols-12 items-start gap-2 border-t border-border-subtle px-4 py-3">
+                  <div className="col-span-5 space-y-1.5">
+                    <ProductSelect
+                      value={line.productId}
+                      onChange={(productId, product) => {
+                        if (product) {
+                          updateLineFields(i, {
+                            productId,
+                            description: product.name,
+                            unitPrice: getProductPrice(product, "purchase"),
+                          });
+                        } else {
+                          updateLine(i, "productId", productId);
+                        }
+                      }}
+                      placeholder="Select product"
+                      className="h-8 min-h-8"
+                    />
+                    <Input
+                      value={line.description}
+                      onChange={(e) => updateLine(i, "description", e.target.value)}
+                      placeholder="Add description (optional)"
+                      className="h-8 rounded-lg border-border-subtle text-[13px]"
+                    />
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-1 pt-1">
                     <Input type="number" min="1" value={line.quantity} onChange={(e) => updateLine(i, "quantity", Number(e.target.value))} className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 pt-1">
                     <Input type="number" min="0" step="0.01" value={line.unitPrice || ""} onChange={(e) => updateLine(i, "unitPrice", Number(e.target.value))} placeholder="0.00" className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-1 pt-1">
                     <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
                       <option value={5}>5%</option>
                       <option value={0}>0%</option>
                     </StyledSelect>
                   </div>
-                  <div className="col-span-2 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
-                  <div className="col-span-1 flex justify-center">
+                  <div className="col-span-2 pt-1 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
+                  <div className="col-span-1 flex justify-center pt-1">
                     <button type="button" onClick={() => removeLine(i)} className="text-text-meta hover:text-error disabled:opacity-30" disabled={lines.length <= 1}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -235,7 +273,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
           onCancel={() => { reset(); onOpenChange(false); }}
           onSave={handleSave}
           saveLabel="Record Bill"
-          saveDisabled={!supplierId || subtotal <= 0 || !billNumber.trim()}
+          saveDisabled={!supplierId || subtotal <= 0 || !billNumber.trim() || lines.some((l) => !l.productId)}
         />
       </EntityPanelContent>
     </EntityPanel>

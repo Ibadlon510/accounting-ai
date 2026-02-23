@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { Package, Tag, DollarSign, Boxes, Info } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
-import type { Item } from "@/lib/mock/inventory-data";
+type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure: string; salesPrice: number; purchasePrice: number; costPrice: number; quantityOnHand: number; reorderLevel: number; taxCode: string | null; trackInventory: boolean; isActive: boolean; totalValue?: number };
 
 interface AddItemPanelProps {
   open: boolean;
@@ -67,6 +67,8 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
       costPrice: pp,
       quantityOnHand: qty,
       reorderLevel: rl,
+      taxCode: "VAT5",
+      trackInventory: type === "product",
       isActive: true,
     });
     showSuccess("Item created", `${name.trim()} (${sku.trim().toUpperCase()}) has been added to inventory.`);

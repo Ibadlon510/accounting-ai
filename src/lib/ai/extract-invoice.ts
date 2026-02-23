@@ -23,10 +23,18 @@ Based on the line items, predict the single most accurate General Ledger (GL) Ca
 - "6800 - Government Fees & Licenses" (Trade License, Visa, Labour)
 - "5000 - Cost of Goods Sold" (Raw materials, Inventory)
 
+### DOCUMENT CLASSIFICATION:
+First, classify the document type:
+- "purchase_invoice" — A bill/invoice FROM a supplier TO you (you are the buyer). Has "Invoice" or "Tax Invoice" and is from a vendor/supplier.
+- "sales_invoice" — An invoice FROM you TO a customer (you are the seller). You issued this invoice.
+- "receipt" — A simple receipt/proof of payment, often from a retail store or service.
+- "credit_note" — A credit note, refund, or adjustment document.
+
 ### OUTPUT FORMAT:
 Return ONLY valid JSON.
 Structure:
 {
+  "document_type": "purchase_invoice" | "sales_invoice" | "receipt" | "credit_note",
   "merchant": {
     "name": "string (Cleaned, e.g., 'STARBUCKS' instead of 'STARBUCKS COFFEE L.L.C')",
     "trn": "string (digits only) or null",
@@ -66,19 +74,26 @@ export async function extractInvoiceFromImage(
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const part = mimeType.startsWith("image/")
     ? { inlineData: { data: Buffer.from(imageBytes).toString("base64"), mimeType } }
     : { inlineData: { data: Buffer.from(imageBytes).toString("base64"), mimeType: "application/pdf" } };
 
-  const result = await model.generateContent([
-    { text: UAE_INVOICE_PROMPT },
-    part,
-  ]);
+  let text: string;
+  try {
+    const result = await model.generateContent([
+      { text: UAE_INVOICE_PROMPT },
+      part,
+    ]);
+    const response = result.response;
+    text = response.text();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[extract-invoice] Gemini API error:", msg);
+    return { ok: false, error: `Gemini API error: ${msg}` };
+  }
 
-  const response = result.response;
-  const text = response.text();
   if (!text) {
     return { ok: false, error: "Empty response from model" };
   }

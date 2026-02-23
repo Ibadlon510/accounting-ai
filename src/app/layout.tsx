@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -34,10 +35,12 @@ export default function RootLayout({
       </head>
       <body className={`${plusJakarta.variable} font-sans antialiased`}>
         <AuthSessionProvider>
+          <QueryProvider>
           <TooltipProvider>
             {children}
             <Toaster position="bottom-right" richColors />
           </TooltipProvider>
+          </QueryProvider>
         </AuthSessionProvider>
       </body>
     </html>

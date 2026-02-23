@@ -1,10 +1,11 @@
 /**
  * Database seed script: populates an organization with full 2025 data
  * (customers, suppliers, items, bank accounts, invoices, bills, payments,
- * journal entries, VAT returns, inventory movements) to replace mock data usage.
+ * journal entries, VAT returns, inventory movements). This is the only source of demo data.
  *
  * Usage: DATABASE_URL=... npx tsx src/lib/db/seed.ts
  * Optional: SEED_ORG_ID=uuid to seed a specific org; otherwise uses first org or creates "Demo 2025".
+ * Optional: SEED_MODULES=sales,purchases,banking,inventory,accounting,vat to limit modules.
  */
 
 import "dotenv/config";
@@ -37,6 +38,21 @@ import { ACCOUNT_TYPES } from "../accounting/uae-chart-of-accounts";
 import { eq } from "drizzle-orm";
 
 const YEAR = 2025;
+
+export const SEED_MODULE_IDS = [
+  "sales",
+  "purchases",
+  "banking",
+  "inventory",
+  "accounting",
+  "vat",
+] as const;
+
+export type SeedModuleId = (typeof SEED_MODULE_IDS)[number];
+
+export type SeedOptions = {
+  modules?: SeedModuleId[];
+};
 
 function date(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -162,19 +178,64 @@ async function seedFiscalYearAndPeriods(organizationId: string): Promise<{
   return { fiscalYearId: fy.id, periodIdsByMonth };
 }
 
-/**
- * Seed full 2025 demo data for a given organization.
- * Can be called from API routes or CLI.
- */
-export async function seedDemoData(organizationId: string): Promise<void> {
+type SeedContext = {
+  organizationId: string;
+  accountByCode: Map<string, string>;
+  periodIdsByMonth: Map<number, string>;
+  acc: (code: string) => string;
+};
+
+async function ensureBankAccounts(ctx: SeedContext): Promise<{ mainBankId: string; usdBankId: string }> {
+  const { organizationId, acc } = ctx;
+  const existingBanks = await db.select().from(bankAccounts).where(eq(bankAccounts.organizationId, organizationId)).limit(1);
+  if (existingBanks.length > 0) {
+    const all = await db.select().from(bankAccounts).where(eq(bankAccounts.organizationId, organizationId));
+    return {
+      mainBankId: all[0]!.id,
+      usdBankId: all[1]?.id ?? all[0]!.id,
+    };
+  }
+  const ledgerCash = acc("1110");
+  const ledgerUsd = acc("1120");
+  const [main, usd] = await db
+    .insert(bankAccounts)
+    .values([
+      { organizationId, accountName: "Main Operating Account", bankName: "Emirates NBD", accountNumber: "1017-XXXXXX-01", iban: "AE12026000101700000001", currency: "AED", ledgerAccountId: ledgerCash, currentBalance: "0", isActive: true },
+      { organizationId, accountName: "USD Account", bankName: "Emirates NBD", accountNumber: "1017-XXXXXX-02", iban: "AE12026000101700000002", currency: "USD", ledgerAccountId: ledgerUsd, currentBalance: "0", isActive: true },
+    ])
+    .returning({ id: bankAccounts.id });
+  return {
+    mainBankId: main!.id,
+    usdBankId: usd?.id ?? main!.id,
+  };
+}
+
+async function seedFoundation(organizationId: string): Promise<SeedContext> {
   await ensureAccountTypes();
   await seedChartOfAccounts(organizationId);
   const accountByCode = await getAccountMap(organizationId);
-  const { fiscalYearId, periodIdsByMonth } = await seedFiscalYearAndPeriods(organizationId);
+  const { periodIdsByMonth } = await seedFiscalYearAndPeriods(organizationId);
+
+  const existingTax = await db.select({ id: taxCodes.id }).from(taxCodes).where(eq(taxCodes.organizationId, organizationId)).limit(1);
+  if (existingTax.length === 0) {
+    await db.insert(taxCodes).values([
+      { organizationId, code: "VAT5", name: "VAT 5%", rate: "5", type: "output" },
+      { organizationId, code: "VAT5", name: "VAT 5% Input", rate: "5", type: "input" },
+      { organizationId, code: "EXEMPT", name: "Exempt", rate: "0", type: "exempt" },
+    ]);
+  }
 
   const acc = (code: string) => accountByCode.get(code)!;
+  return {
+    organizationId,
+    accountByCode,
+    periodIdsByMonth,
+    acc,
+  };
+}
 
-  // ─── Customers ─────────────────────────────────────────────
+async function seedSales(ctx: SeedContext): Promise<void> {
+  const { organizationId, acc } = ctx;
   const existingCustomers = await db
     .select({ id: customers.id })
     .from(customers)
@@ -199,86 +260,6 @@ export async function seedDemoData(organizationId: string): Promise<void> {
   }
   console.log("Customers:", customerIds.length);
 
-  // ─── Suppliers ─────────────────────────────────────────────
-  let supplierIds: string[];
-  const existingSuppliers = await db.select({ id: suppliers.id }).from(suppliers).where(eq(suppliers.organizationId, organizationId)).limit(1);
-  if (existingSuppliers.length > 0) {
-    supplierIds = (await db.select({ id: suppliers.id }).from(suppliers).where(eq(suppliers.organizationId, organizationId))).map((s) => s.id);
-  } else {
-    const supplierRows = await db
-      .insert(suppliers)
-      .values([
-        { organizationId, name: "Du Telecom", email: "billing@du.ae", phone: "+971 4 390 5555", taxNumber: "300123456789003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 15 },
-        { organizationId, name: "DEWA", email: "corporate@dewa.gov.ae", phone: "+971 4 601 9999", taxNumber: "300234567890003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 15 },
-        { organizationId, name: "Emirates Office Supplies", email: "orders@eos.ae", phone: "+971 4 222 3333", taxNumber: "300345678901003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 30 },
-        { organizationId, name: "Gulf IT Solutions", email: "sales@gulfitsolutions.ae", phone: "+971 4 444 5555", taxNumber: "300456789012003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 30 },
-        { organizationId, name: "National Properties LLC", email: "leasing@natprop.ae", phone: "+971 4 333 4444", taxNumber: "300567890123003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 0 },
-      ])
-      .returning({ id: suppliers.id });
-    supplierIds = supplierRows.map((r) => r.id);
-  }
-  console.log("Suppliers:", supplierIds.length);
-
-  // ─── Tax codes ─────────────────────────────────────────────
-  const existingTax = await db.select({ id: taxCodes.id }).from(taxCodes).where(eq(taxCodes.organizationId, organizationId)).limit(1);
-  if (existingTax.length === 0) {
-    await db.insert(taxCodes).values([
-      { organizationId, code: "VAT5", name: "VAT 5%", rate: "5", type: "output" },
-      { organizationId, code: "VAT5", name: "VAT 5% Input", rate: "5", type: "input" },
-      { organizationId, code: "EXEMPT", name: "Exempt", rate: "0", type: "exempt" },
-    ]);
-  }
-
-  // ─── Items ──────────────────────────────────────────────────
-  let itemIds: string[];
-  const salesAccountId = acc("4020");
-  const purchaseAccountId = acc("5010");
-  const inventoryAccountId = acc("1310");
-  const existingItems = await db.select({ id: items.id }).from(items).where(eq(items.organizationId, organizationId)).limit(1);
-  if (existingItems.length > 0) {
-    itemIds = (await db.select({ id: items.id }).from(items).where(eq(items.organizationId, organizationId))).map((i) => i.id);
-  } else {
-    const itemRows = await db
-      .insert(items)
-      .values([
-        { organizationId, name: "Dell Monitor 27\" 4K", sku: "MON-D27-4K", type: "product", unitOfMeasure: "pcs", salesPrice: "1800", purchasePrice: "1200", costPrice: "1200", quantityOnHand: "15", reorderLevel: "5", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-        { organizationId, name: "Logitech MX Keys Keyboard", sku: "KB-LG-MXK", type: "product", unitOfMeasure: "pcs", salesPrice: "550", purchasePrice: "350", costPrice: "350", quantityOnHand: "25", reorderLevel: "10", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-        { organizationId, name: "Cat6 Network Cable (305m)", sku: "CBL-CAT6-305", type: "product", unitOfMeasure: "box", salesPrice: "450", purchasePrice: "280", costPrice: "280", quantityOnHand: "8", reorderLevel: "3", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-        { organizationId, name: "HP LaserJet Pro Printer", sku: "PRN-HP-LJ", type: "product", unitOfMeasure: "pcs", salesPrice: "2200", purchasePrice: "1500", costPrice: "1500", quantityOnHand: "3", reorderLevel: "2", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-        { organizationId, name: "A4 Copy Paper (Ream)", sku: "PPR-A4-500", type: "product", unitOfMeasure: "ream", salesPrice: "30", purchasePrice: "22", costPrice: "22", quantityOnHand: "200", reorderLevel: "50", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-        { organizationId, name: "IT Consulting (Hourly)", sku: "SVC-IT-HR", type: "service", unitOfMeasure: "hour", salesPrice: "500", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false },
-        { organizationId, name: "System Audit Package", sku: "SVC-AUDIT", type: "service", unitOfMeasure: "unit", salesPrice: "15000", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false },
-        { organizationId, name: "Wireless Mouse", sku: "MSE-WL-01", type: "product", unitOfMeasure: "pcs", salesPrice: "180", purchasePrice: "95", costPrice: "95", quantityOnHand: "2", reorderLevel: "10", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
-      ])
-      .returning({ id: items.id });
-    itemIds = itemRows.map((r) => r.id);
-  }
-  console.log("Items:", itemIds.length);
-
-  // ─── Bank accounts ─────────────────────────────────────────
-  let mainBankId: string;
-  let usdBankId: string;
-  const existingBanks = await db.select().from(bankAccounts).where(eq(bankAccounts.organizationId, organizationId)).limit(1);
-  if (existingBanks.length > 0) {
-    const all = await db.select().from(bankAccounts).where(eq(bankAccounts.organizationId, organizationId));
-    mainBankId = all[0]!.id;
-    usdBankId = all[1]?.id ?? mainBankId;
-  } else {
-    const ledgerCash = acc("1110");
-    const ledgerUsd = acc("1120");
-    const [main, usd] = await db
-      .insert(bankAccounts)
-      .values([
-        { organizationId, accountName: "Main Operating Account", bankName: "Emirates NBD", accountNumber: "1017-XXXXXX-01", iban: "AE12026000101700000001", currency: "AED", ledgerAccountId: ledgerCash, currentBalance: "0", isActive: true },
-        { organizationId, accountName: "USD Account", bankName: "Emirates NBD", accountNumber: "1017-XXXXXX-02", iban: "AE12026000101700000002", currency: "USD", ledgerAccountId: ledgerUsd, currentBalance: "0", isActive: true },
-      ])
-      .returning({ id: bankAccounts.id });
-    mainBankId = main!.id;
-    usdBankId = usd!.id;
-  }
-  console.log("Bank accounts created");
-
-  // ─── Invoices spread across 2025 ───────────────────────────
   const existingInvoices = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.organizationId, organizationId)).limit(1);
   if (existingInvoices.length === 0) {
     const invData: Array<{ month: number; customerIndex: number; subtotal: number; lines: Array<{ desc: string; qty: number; unitPrice: number }> }> = [
@@ -342,7 +323,66 @@ export async function seedDemoData(organizationId: string): Promise<void> {
     console.log("Invoices: 12 (full 2025)");
   }
 
-  // ─── Bills spread across 2025 ──────────────────────────────
+  const existingPayments = await db.select({ id: payments.id }).from(payments).where(eq(payments.organizationId, organizationId)).limit(1);
+  if (existingPayments.length === 0) {
+    const { mainBankId } = await ensureBankAccounts(ctx);
+    const invList = await db.select({ id: invoices.id, total: invoices.total, invoiceNumber: invoices.invoiceNumber, customerId: invoices.customerId }).from(invoices).where(eq(invoices.organizationId, organizationId));
+    let payNum = 1;
+    for (const inv of invList) {
+      const totalNum = parseFloat(inv.total);
+      if (totalNum <= 0) continue;
+      const payDate = date(YEAR, 1 + (payNum % 12), Math.min(10 + payNum, 28));
+      const [payment] = await db
+        .insert(payments)
+        .values({
+          organizationId,
+          paymentNumber: `PAY-R-${YEAR}-${String(payNum).padStart(3, "0")}`,
+          paymentDate: payDate,
+          paymentType: "received",
+          entityType: "customer",
+          entityId: inv.customerId,
+          bankAccountId: mainBankId,
+          amount: inv.total,
+          currency: "AED",
+          method: "bank_transfer",
+          reference: `TRF-${payDate.replace(/-/g, "")}`,
+        })
+        .returning({ id: payments.id });
+      if (payment) {
+        await db.insert(paymentAllocations).values({
+          paymentId: payment.id,
+          documentType: "invoice",
+          documentId: inv.id,
+          amount: inv.total,
+        });
+      }
+      payNum++;
+    }
+    console.log("Payments: created for invoices");
+  }
+}
+
+async function seedPurchases(ctx: SeedContext): Promise<void> {
+  const { organizationId } = ctx;
+  const existingSuppliers = await db.select({ id: suppliers.id }).from(suppliers).where(eq(suppliers.organizationId, organizationId)).limit(1);
+  let supplierIds: string[];
+  if (existingSuppliers.length > 0) {
+    supplierIds = (await db.select({ id: suppliers.id }).from(suppliers).where(eq(suppliers.organizationId, organizationId))).map((s) => s.id);
+  } else {
+    const supplierRows = await db
+      .insert(suppliers)
+      .values([
+        { organizationId, name: "Du Telecom", email: "billing@du.ae", phone: "+971 4 390 5555", taxNumber: "300123456789003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 15 },
+        { organizationId, name: "DEWA", email: "corporate@dewa.gov.ae", phone: "+971 4 601 9999", taxNumber: "300234567890003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 15 },
+        { organizationId, name: "Emirates Office Supplies", email: "orders@eos.ae", phone: "+971 4 222 3333", taxNumber: "300345678901003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 30 },
+        { organizationId, name: "Gulf IT Solutions", email: "sales@gulfitsolutions.ae", phone: "+971 4 444 5555", taxNumber: "300456789012003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 30 },
+        { organizationId, name: "National Properties LLC", email: "leasing@natprop.ae", phone: "+971 4 333 4444", taxNumber: "300567890123003", city: "Dubai", country: "UAE", currency: "AED", paymentTermsDays: 0 },
+      ])
+      .returning({ id: suppliers.id });
+    supplierIds = supplierRows.map((r) => r.id);
+  }
+  console.log("Suppliers:", supplierIds.length);
+
   const existingBills = await db.select({ id: bills.id }).from(bills).where(eq(bills.organizationId, organizationId)).limit(1);
   if (existingBills.length === 0) {
     const billData: Array<{ month: number; supplierIndex: number; subtotal: number; tax: number; desc: string }> = [
@@ -400,46 +440,13 @@ export async function seedDemoData(organizationId: string): Promise<void> {
     }
     console.log("Bills: 14 (full 2025)");
   }
+}
 
-  // ─── Payments (received) spread across 2025 ─────────────────
-  const existingPayments = await db.select({ id: payments.id }).from(payments).where(eq(payments.organizationId, organizationId)).limit(1);
-  if (existingPayments.length === 0) {
-    const invList = await db.select({ id: invoices.id, total: invoices.total, invoiceNumber: invoices.invoiceNumber, customerId: invoices.customerId }).from(invoices).where(eq(invoices.organizationId, organizationId));
-    let payNum = 1;
-    for (const inv of invList) {
-      const totalNum = parseFloat(inv.total);
-      if (totalNum <= 0) continue;
-      const payDate = date(YEAR, 1 + (payNum % 12), Math.min(10 + payNum, 28));
-      const [payment] = await db
-        .insert(payments)
-        .values({
-          organizationId,
-          paymentNumber: `PAY-R-${YEAR}-${String(payNum).padStart(3, "0")}`,
-          paymentDate: payDate,
-          paymentType: "received",
-          entityType: "customer",
-          entityId: inv.customerId,
-          bankAccountId: mainBankId,
-          amount: inv.total,
-          currency: "AED",
-          method: "bank_transfer",
-          reference: `TRF-${payDate.replace(/-/g, "")}`,
-        })
-        .returning({ id: payments.id });
-      if (payment) {
-        await db.insert(paymentAllocations).values({
-          paymentId: payment.id,
-          documentType: "invoice",
-          documentId: inv.id,
-          amount: inv.total,
-        });
-      }
-      payNum++;
-    }
-    console.log("Payments: created for invoices");
-  }
+async function seedBanking(ctx: SeedContext): Promise<void> {
+  const { organizationId } = ctx;
+  const { mainBankId } = await ensureBankAccounts(ctx);
+  console.log("Bank accounts ready");
 
-  // ─── Bank transactions (full 2025) ───────────────────────────
   const existingTx = await db.select({ id: bankTransactions.id }).from(bankTransactions).where(eq(bankTransactions.organizationId, organizationId)).limit(1);
   if (existingTx.length === 0) {
     const txData: Array<{ month: number; day: number; desc: string; amount: number; type: "debit" | "credit"; category: string; reconciled: boolean }> = [];
@@ -466,12 +473,71 @@ export async function seedDemoData(organizationId: string): Promise<void> {
     }
     console.log("Bank transactions: ", txData.length);
   }
+}
 
-  // ─── Journal entries (full 2025) ─────────────────────────────
+async function seedInventory(ctx: SeedContext): Promise<void> {
+  const { organizationId, acc } = ctx;
+  const salesAccountId = acc("4020");
+  const purchaseAccountId = acc("5010");
+  const inventoryAccountId = acc("1310");
+  const existingItems = await db.select({ id: items.id }).from(items).where(eq(items.organizationId, organizationId)).limit(1);
+  let itemIds: string[];
+  if (existingItems.length > 0) {
+    itemIds = (await db.select({ id: items.id }).from(items).where(eq(items.organizationId, organizationId))).map((i) => i.id);
+  } else {
+    const itemRows = await db
+      .insert(items)
+      .values([
+        { organizationId, name: "Dell Monitor 27\" 4K", sku: "MON-D27-4K", type: "product", unitOfMeasure: "pcs", salesPrice: "1800", purchasePrice: "1200", costPrice: "1200", quantityOnHand: "15", reorderLevel: "5", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+        { organizationId, name: "Logitech MX Keys Keyboard", sku: "KB-LG-MXK", type: "product", unitOfMeasure: "pcs", salesPrice: "550", purchasePrice: "350", costPrice: "350", quantityOnHand: "25", reorderLevel: "10", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+        { organizationId, name: "Cat6 Network Cable (305m)", sku: "CBL-CAT6-305", type: "product", unitOfMeasure: "box", salesPrice: "450", purchasePrice: "280", costPrice: "280", quantityOnHand: "8", reorderLevel: "3", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+        { organizationId, name: "HP LaserJet Pro Printer", sku: "PRN-HP-LJ", type: "product", unitOfMeasure: "pcs", salesPrice: "2200", purchasePrice: "1500", costPrice: "1500", quantityOnHand: "3", reorderLevel: "2", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+        { organizationId, name: "A4 Copy Paper (Ream)", sku: "PPR-A4-500", type: "product", unitOfMeasure: "ream", salesPrice: "30", purchasePrice: "22", costPrice: "22", quantityOnHand: "200", reorderLevel: "50", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+        { organizationId, name: "IT Consulting (Hourly)", sku: "SVC-IT-HR", type: "service", unitOfMeasure: "hour", salesPrice: "500", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false },
+        { organizationId, name: "System Audit Package", sku: "SVC-AUDIT", type: "service", unitOfMeasure: "unit", salesPrice: "15000", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false },
+        { organizationId, name: "Wireless Mouse", sku: "MSE-WL-01", type: "product", unitOfMeasure: "pcs", salesPrice: "180", purchasePrice: "95", costPrice: "95", quantityOnHand: "2", reorderLevel: "10", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true },
+      ])
+      .returning({ id: items.id });
+    itemIds = itemRows.map((r) => r.id);
+  }
+  console.log("Items:", itemIds.length);
+
+  const existingMov = await db.select({ id: inventoryMovements.id }).from(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId)).limit(1);
+  if (existingMov.length === 0 && itemIds.length >= 5) {
+    const movements: Array<{ month: number; itemIndex: number; type: "purchase" | "sale" | "adjustment"; qty: number; unitCost: number }> = [
+      { month: 1, itemIndex: 0, type: "purchase", qty: 20, unitCost: 1200 },
+      { month: 2, itemIndex: 0, type: "sale", qty: -5, unitCost: 1200 },
+      { month: 2, itemIndex: 1, type: "purchase", qty: 30, unitCost: 350 },
+      { month: 3, itemIndex: 1, type: "sale", qty: -5, unitCost: 350 },
+      { month: 3, itemIndex: 4, type: "purchase", qty: 250, unitCost: 22 },
+      { month: 4, itemIndex: 4, type: "adjustment", qty: -50, unitCost: 22 },
+      { month: 5, itemIndex: 7, type: "purchase", qty: 12, unitCost: 95 },
+      { month: 6, itemIndex: 7, type: "sale", qty: -10, unitCost: 95 },
+      { month: 7, itemIndex: 0, type: "purchase", qty: 10, unitCost: 1200 },
+      { month: 9, itemIndex: 2, type: "purchase", qty: 15, unitCost: 280 },
+      { month: 11, itemIndex: 3, type: "purchase", qty: 2, unitCost: 1500 },
+    ];
+    for (const mov of movements) {
+      const totalCost = Math.abs(mov.qty) * mov.unitCost;
+      await db.insert(inventoryMovements).values({
+        organizationId,
+        itemId: itemIds[mov.itemIndex]!,
+        movementType: mov.type,
+        quantity: String(mov.qty),
+        unitCost: String(mov.unitCost),
+        totalCost: String(totalCost),
+        referenceType: mov.type === "purchase" ? "bill" : mov.type === "sale" ? "invoice" : null,
+      });
+    }
+    console.log("Inventory movements: ", movements.length);
+  }
+}
+
+async function seedAccounting(ctx: SeedContext): Promise<void> {
+  const { organizationId, periodIdsByMonth, acc } = ctx;
   const existingJE = await db.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.organizationId, organizationId)).limit(1);
   if (existingJE.length === 0) {
     let jeSeq = 1;
-    // Opening capital - Jan
     const periodJan = periodIdsByMonth.get(1)!;
     const [je1] = await db
       .insert(journalEntries)
@@ -494,7 +560,6 @@ export async function seedDemoData(organizationId: string): Promise<void> {
         { journalEntryId: je1.id, organizationId, accountId: acc("3010"), debit: "0", credit: "500000", baseCurrencyDebit: "0", baseCurrencyCredit: "500000", lineOrder: 2 },
       ]);
     }
-    // Monthly rent and salary entries
     for (let m = 1; m <= 12; m++) {
       const periodId = periodIdsByMonth.get(m)!;
       const [jeRent] = await db
@@ -544,8 +609,10 @@ export async function seedDemoData(organizationId: string): Promise<void> {
     }
     console.log("Journal entries: created for 2025");
   }
+}
 
-  // ─── VAT returns (Q1–Q4 2025) ───────────────────────────────
+async function seedVat(ctx: SeedContext): Promise<void> {
+  const { organizationId } = ctx;
   const existingVat = await db.select({ id: vatReturns.id }).from(vatReturns).where(eq(vatReturns.organizationId, organizationId)).limit(1);
   if (existingVat.length === 0) {
     const quarters = [
@@ -573,36 +640,45 @@ export async function seedDemoData(organizationId: string): Promise<void> {
     }
     console.log("VAT returns: Q1–Q4 2025");
   }
+}
 
-  // ─── Inventory movements (2025) ─────────────────────────────
-  const existingMov = await db.select({ id: inventoryMovements.id }).from(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId)).limit(1);
-  if (existingMov.length === 0 && itemIds.length >= 5) {
-    const movements: Array<{ month: number; itemIndex: number; type: "purchase" | "sale" | "adjustment"; qty: number; unitCost: number }> = [
-      { month: 1, itemIndex: 0, type: "purchase", qty: 20, unitCost: 1200 },
-      { month: 2, itemIndex: 0, type: "sale", qty: -5, unitCost: 1200 },
-      { month: 2, itemIndex: 1, type: "purchase", qty: 30, unitCost: 350 },
-      { month: 3, itemIndex: 1, type: "sale", qty: -5, unitCost: 350 },
-      { month: 3, itemIndex: 4, type: "purchase", qty: 250, unitCost: 22 },
-      { month: 4, itemIndex: 4, type: "adjustment", qty: -50, unitCost: 22 },
-      { month: 5, itemIndex: 7, type: "purchase", qty: 12, unitCost: 95 },
-      { month: 6, itemIndex: 7, type: "sale", qty: -10, unitCost: 95 },
-      { month: 7, itemIndex: 0, type: "purchase", qty: 10, unitCost: 1200 },
-      { month: 9, itemIndex: 2, type: "purchase", qty: 15, unitCost: 280 },
-      { month: 11, itemIndex: 3, type: "purchase", qty: 2, unitCost: 1500 },
-    ];
-    for (const mov of movements) {
-      const totalCost = Math.abs(mov.qty) * mov.unitCost;
-      await db.insert(inventoryMovements).values({
-        organizationId,
-        itemId: itemIds[mov.itemIndex]!,
-        movementType: mov.type,
-        quantity: String(mov.qty),
-        unitCost: String(mov.unitCost),
-        totalCost: String(totalCost),
-        referenceType: mov.type === "purchase" ? "bill" : mov.type === "sale" ? "invoice" : null,
-      });
+function parseModulesFromEnv(): Set<SeedModuleId> | null {
+  const raw = process.env.SEED_MODULES;
+  if (!raw || typeof raw !== "string") return null;
+  const parsed = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is SeedModuleId => SEED_MODULE_IDS.includes(s as SeedModuleId));
+  if (parsed.length === 0) return null;
+  return new Set(parsed);
+}
+
+/**
+ * Seed full 2025 demo data for a given organization.
+ * Can be called from API routes or CLI.
+ * When options.modules is undefined or empty, seeds all modules (backward compatible).
+ */
+export async function seedDemoData(organizationId: string, options?: SeedOptions): Promise<void> {
+  const selectedModules =
+    options?.modules && options.modules.length > 0
+      ? new Set(options.modules.filter((m): m is SeedModuleId => SEED_MODULE_IDS.includes(m)))
+      : new Set(SEED_MODULE_IDS);
+
+  const ctx = await seedFoundation(organizationId);
+
+  const moduleHandlers: Record<SeedModuleId, (ctx: SeedContext) => Promise<void>> = {
+    sales: seedSales,
+    purchases: seedPurchases,
+    banking: seedBanking,
+    inventory: seedInventory,
+    accounting: seedAccounting,
+    vat: seedVat,
+  };
+
+  for (const mod of SEED_MODULE_IDS) {
+    if (selectedModules.has(mod)) {
+      await moduleHandlers[mod](ctx);
     }
-    console.log("Inventory movements: ", movements.length);
   }
 
   console.log("Seed completed. Organization ID:", organizationId);
@@ -613,16 +689,12 @@ export async function seedDemoData(organizationId: string): Promise<void> {
  * Deletes in FK-safe order. Does NOT delete the org itself or user roles.
  */
 export async function removeDemoData(organizationId: string): Promise<void> {
-  // Delete in reverse-dependency order
   await db.delete(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId));
   await db.delete(vatReturns).where(eq(vatReturns.organizationId, organizationId));
   await db.delete(journalLines).where(eq(journalLines.organizationId, organizationId));
   await db.delete(journalEntries).where(eq(journalEntries.organizationId, organizationId));
-  // payment allocations cascade from payments
   await db.delete(payments).where(eq(payments.organizationId, organizationId));
-  // invoice lines cascade from invoices
   await db.delete(invoices).where(eq(invoices.organizationId, organizationId));
-  // bill lines cascade from bills
   await db.delete(bills).where(eq(bills.organizationId, organizationId));
   await db.delete(bankTransactions).where(eq(bankTransactions.organizationId, organizationId));
   await db.delete(bankAccounts).where(eq(bankAccounts.organizationId, organizationId));
@@ -644,13 +716,15 @@ async function main() {
   console.log("Seeding database with full 2025 data...");
   const organizationId = await getOrCreateOrg();
   console.log("Organization ID:", organizationId);
-  await seedDemoData(organizationId);
+  const modules = parseModulesFromEnv();
+  await seedDemoData(organizationId, modules ? { modules: [...modules] } : undefined);
 }
 
-// Only run main() when executed directly as a script
 if (typeof process !== "undefined" && process.argv[1]?.includes("seed")) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

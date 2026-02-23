@@ -1,6 +1,6 @@
 # AI Accounting SaaS — Technical Implementation Plan
 
-A greenfield UAE-focused AI accounting SaaS for SMEs: single Next.js app on Vercel + Supabase, with hybrid AI (OpenAI for smart entry, rule-based for bulk classification), targeting a ~20-week MVP.
+A greenfield UAE-focused AI accounting SaaS for SMEs: single Next.js app on Render, with hybrid AI (OpenAI for smart entry, rule-based for bulk classification), targeting a ~20-week MVP.
 
 ---
 
@@ -9,9 +9,9 @@ A greenfield UAE-focused AI accounting SaaS for SMEs: single Next.js app on Verc
 | Decision | Choice |
 |----------|--------|
 | Backend | Full-stack Next.js (TypeScript everywhere) |
-| Hosting | Vercel + Supabase |
+| Hosting | Render |
 | Multi-tenancy | Shared DB + Row-Level Security (RLS) |
-| Auth | Supabase Auth (email/password, MFA-ready) |
+| Auth | NextAuth.js (email/password + Google OAuth, MFA-ready) |
 | Inventory costing | Both weighted average + FIFO (Phase 2, not MVP) |
 | Payments | Stripe (post-MVP, no subscription in MVP) |
 | NL Entry | OpenAI GPT-4o-mini (smart entry bar) + rule-based (bulk ops) |
@@ -28,13 +28,13 @@ A greenfield UAE-focused AI accounting SaaS for SMEs: single Next.js app on Verc
 | Language | TypeScript |
 | UI | Tailwind CSS + shadcn/ui |
 | State | Zustand + TanStack Query |
-| Database | PostgreSQL (Supabase) |
+| Database | PostgreSQL (Render) |
 | ORM | Drizzle ORM |
-| Auth | Supabase Auth |
-| File Storage | Supabase Storage |
+| Auth | NextAuth.js |
+| File Storage | AWS S3 |
 | PDF Generation | @react-pdf/renderer |
 | Email | Resend |
-| Hosting | Vercel |
+| Hosting | Render |
 | AI (smart entry) | OpenAI GPT-4o-mini (structured outputs) |
 | AI (classification) | Rule-based engine in TypeScript |
 
@@ -52,8 +52,8 @@ A greenfield UAE-focused AI accounting SaaS for SMEs: single Next.js app on Verc
 
 ### Multi-Tenancy
 - `organization_id` on every table
-- Supabase RLS policies enforce data isolation
-- Secure query filtering at DB level
+- Application-level tenant isolation via `organization_id` checks
+- Secure query filtering at application level
 
 ### AI Hybrid Approach
 - **Smart entry bar**: OpenAI GPT-4o-mini parses natural language → structured transaction (~$0.01/mo per active user)
@@ -87,9 +87,9 @@ employees, salary_records (payroll foundation)
 ## MVP Build Order — 9 Sprints (~20 weeks)
 
 ### Sprint 1: Foundation (Week 1–2)
-- Next.js + Supabase + Drizzle scaffolding
+- Next.js + Drizzle + PostgreSQL scaffolding
 - Auth flow (login, signup, org creation)
-- Multi-tenant RLS setup
+- Multi-tenant org isolation setup
 - Base UI shell (sidebar nav, layout, dark/light mode)
 - Organization settings
 
@@ -152,7 +152,7 @@ employees, salary_records (payroll foundation)
 - Error handling + edge cases
 - Performance optimization
 - Security hardening
-- First deploy to Vercel
+- First deploy to Render
 
 ---
 
@@ -175,7 +175,7 @@ employees, salary_records (payroll foundation)
 
 Once confirmed, I will begin with:
 1. `npx create-next-app` with App Router + TypeScript + Tailwind
-2. Supabase project setup instructions
+2. PostgreSQL database setup (local dev + Render production)
 3. Drizzle ORM config + initial schema migration
 4. Auth pages (login/signup)
 5. Base layout with sidebar navigation

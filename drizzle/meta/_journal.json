@@ -8,6 +8,27 @@
       "when": 1771660043158,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771696327370,
+      "tag": "0001_add_document_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771697371289,
+      "tag": "0002_add_document_transaction_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771780000000,
+      "tag": "0003_add_document_id_to_invoices_bills",
+      "breakpoints": true
     }
   ]
 }

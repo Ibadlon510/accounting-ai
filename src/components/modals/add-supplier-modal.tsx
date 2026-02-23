@@ -38,6 +38,7 @@ interface AddSupplierPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (supplier: {
+    id: string;
     name: string;
     email: string;
     phone: string;
@@ -64,12 +65,41 @@ export function AddSupplierPanel({ open, onOpenChange, onAdd }: AddSupplierPanel
     setAutoPayEnabled(false);
   }
 
-  function handleSave() {
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
     if (!name.trim()) { showError("Company name is required"); return; }
-    onAdd({ name, email, phone, taxNumber, city, country, paymentTermsDays: Number(paymentTermsDays) });
-    showSuccess("Supplier added", `${name} has been added to your supplier list.`);
-    reset();
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/purchases/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, email, phone, taxNumber, city, country,
+          paymentTermsDays: Number(paymentTermsDays),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showError("Failed to create supplier", err.error ?? "Please try again.");
+        return;
+      }
+      const data = await res.json();
+      const created = data.supplier;
+      onAdd({
+        id: created.id,
+        name: created.name ?? name,
+        email, phone, taxNumber, city, country,
+        paymentTermsDays: Number(paymentTermsDays),
+      });
+      showSuccess("Supplier added", `${name} has been added to your supplier list.`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      showError("Failed to create supplier", "Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
-import { getVATSummary } from "@/lib/mock/vat-data";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Receipt, FileCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,9 +22,18 @@ type VAT201Report = {
   exemptSales: number;
 };
 
+const emptySummary = { totalOutputVat: 0, totalInputVat: 0, netPayable: 0 };
+
 export default function VATPage() {
-  const mockSummary = getVATSummary();
   const [quarter, setQuarter] = useState("Q1-2026");
+  const [dbSummary, setDbSummary] = useState(emptySummary);
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.vat) setDbSummary(data.vat); })
+      .catch(() => {});
+  }, []);
   const [report, setReport] = useState<VAT201Report | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +54,7 @@ export default function VATPage() {
         totalInputVat: report.inputVat,
         netPayable: report.netVat,
       }
-    : mockSummary;
+    : dbSummary;
 
   return (
     <>

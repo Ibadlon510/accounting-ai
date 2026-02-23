@@ -2,42 +2,15 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
-const data = [
-  { day: "Jan 20", tokens: 120 },
-  { day: "Jan 21", tokens: 85 },
-  { day: "Jan 22", tokens: 200 },
-  { day: "Jan 23", tokens: 45 },
-  { day: "Jan 24", tokens: 0 },
-  { day: "Jan 25", tokens: 0 },
-  { day: "Jan 26", tokens: 150 },
-  { day: "Jan 27", tokens: 310 },
-  { day: "Jan 28", tokens: 175 },
-  { day: "Jan 29", tokens: 90 },
-  { day: "Jan 30", tokens: 220 },
-  { day: "Jan 31", tokens: 60 },
-  { day: "Feb 1", tokens: 180 },
-  { day: "Feb 2", tokens: 0 },
-  { day: "Feb 3", tokens: 140 },
-  { day: "Feb 4", tokens: 250 },
-  { day: "Feb 5", tokens: 130 },
-  { day: "Feb 6", tokens: 95 },
-  { day: "Feb 7", tokens: 170 },
-  { day: "Feb 8", tokens: 0 },
-  { day: "Feb 9", tokens: 0 },
-  { day: "Feb 10", tokens: 210 },
-  { day: "Feb 11", tokens: 160 },
-  { day: "Feb 12", tokens: 80 },
-  { day: "Feb 13", tokens: 190 },
-  { day: "Feb 14", tokens: 110 },
-  { day: "Feb 15", tokens: 240 },
-  { day: "Feb 16", tokens: 0 },
-  { day: "Feb 17", tokens: 155 },
-  { day: "Feb 18", tokens: 300 },
-];
+const emptyData: Array<{ day: string; tokens: number }> = [];
 
-const totalUsed = data.reduce((s, d) => s + d.tokens, 0);
+interface TokenUsageChartProps {
+  data?: Array<{ day: string; tokens: number }>;
+}
 
-export function TokenUsageChart() {
+export function TokenUsageChart({ data }: TokenUsageChartProps) {
+  const chartData = data && data.length > 0 ? data : emptyData;
+  const totalUsed = chartData.reduce((s, d) => s + d.tokens, 0);
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -51,8 +24,11 @@ export function TokenUsageChart() {
         </div>
       </div>
       <div className="h-[140px]">
+        {chartData.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-[12px] text-text-meta">No token usage yet</div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} barSize={8}>
+          <BarChart data={chartData} barSize={8}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
             <XAxis dataKey="day" tick={false} axisLine={false} tickLine={false} />
             <YAxis hide />
@@ -69,6 +45,7 @@ export function TokenUsageChart() {
             <Bar dataKey="tokens" fill="var(--accent-ai)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

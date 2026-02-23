@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError } from "@/lib/utils/toast-helpers";
 import { StyledSelect } from "@/components/ui/styled-select";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Database } from "lucide-react";
 
 const currencies = [
   { code: "AED", label: "AED — UAE Dirham" },
@@ -40,11 +40,14 @@ export default function OnboardingPage() {
   const [fiscalYear, setFiscalYear] = useState(1);
   const [trn, setTrn] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadDemo, setLoadDemo] = useState(false);
+  const [status, setStatus] = useState("");
 
   async function handleSetup(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
+    setStatus("Creating organization...");
     const { createOrganizationAndLaunch } = await import("./actions");
     const result = await createOrganizationAndLaunch({
       companyName: orgName,
@@ -54,10 +57,19 @@ export default function OnboardingPage() {
     });
 
     if (result.ok && result.redirect) {
+      if (loadDemo) {
+        setStatus("Loading demo data...");
+        try {
+          await fetch("/api/org/demo-data", { method: "POST" });
+        } catch {
+          // non-blocking — demo data is optional
+        }
+      }
       router.push(result.redirect);
       router.refresh();
     } else {
       setLoading(false);
+      setStatus("");
       if (!result.ok && "error" in result) {
         console.error(result.error);
         showError("Onboarding failed", String(result.error));
@@ -168,12 +180,30 @@ export default function OnboardingPage() {
           </div>
         </div>
 
+        <label className="flex items-start gap-3 rounded-xl border border-border-subtle p-4 cursor-pointer hover:bg-black/[0.02] transition-colors">
+          <input
+            type="checkbox"
+            checked={loadDemo}
+            onChange={(e) => setLoadDemo(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-border-subtle accent-text-primary"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-text-secondary" strokeWidth={1.8} />
+              <span className="text-[13px] font-semibold text-text-primary">Load demo data</span>
+            </div>
+            <p className="mt-0.5 text-[12px] text-text-meta">
+              Add sample customers, invoices, journal entries, and more to explore the app. You can remove it later in Settings.
+            </p>
+          </div>
+        </label>
+
         <Button
           type="submit"
           disabled={loading}
           className="h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
         >
-          {loading ? "Setting up..." : "Launch Agar"}
+          {loading ? status || "Setting up..." : "Launch Agar"}
         </Button>
       </form>
     </div>

@@ -319,6 +319,7 @@ export const invoices = pgTable("invoices", {
   amountPaid: numeric("amount_paid", { precision: 18, scale: 2 }).notNull().default("0"),
   amountDue: numeric("amount_due", { precision: 18, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -363,6 +364,7 @@ export const bills = pgTable("bills", {
   amountPaid: numeric("amount_paid", { precision: 18, scale: 2 }).notNull().default("0"),
   amountDue: numeric("amount_due", { precision: 18, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -502,7 +504,40 @@ export const bankTransactions = pgTable("bank_transactions", {
   suggestedAccountId: uuid("suggested_account_id"),
   confidence: numeric("confidence", { precision: 5, scale: 2 }),
   importBatch: varchar("import_batch", { length: 50 }),
+  transferReference: varchar("transfer_reference", { length: 50 }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Bank Statements ────────────────────────────────────────
+export const bankStatements = pgTable("bank_statements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  bankAccountId: uuid("bank_account_id")
+    .notNull()
+    .references(() => bankAccounts.id),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+  fileName: varchar("file_name", { length: 255 }),
+  s3Key: text("s3_key"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+});
+
+// ─── Bank Statement Lines ───────────────────────────────────
+export const bankStatementLines = pgTable("bank_statement_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bankStatementId: uuid("bank_statement_id")
+    .notNull()
+    .references(() => bankStatements.id, { onDelete: "cascade" }),
+  transactionDate: date("transaction_date").notNull(),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+  type: varchar("type", { length: 10 }).notNull(), // credit, debit
+  reference: varchar("reference", { length: 100 }),
+  matchedBankTransactionId: uuid("matched_bank_transaction_id").references(() => bankTransactions.id, { onDelete: "set null" }),
+  reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+  lineOrder: integer("line_order").notNull().default(0),
 });
 
 // ─── Tax Codes ──────────────────────────────────────────────
@@ -578,12 +613,16 @@ export const classificationRules = pgTable("classification_rules", {
 export const documentStatuses = ["PENDING", "PROCESSED", "FLAGGED", "ARCHIVED", "PROCESSING_FAILED"] as const;
 export type DocumentStatus = (typeof documentStatuses)[number];
 
+export const documentTypes = ["purchase_invoice", "sales_invoice", "receipt", "credit_note", "bank_statement"] as const;
+export type DocumentType = (typeof documentTypes)[number];
+
 export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
   s3Key: varchar("s3_key", { length: 512 }).notNull(),
+  documentType: varchar("document_type", { length: 20 }), // purchase_invoice, sales_invoice, receipt, credit_note, bank_statement
   status: varchar("status", { length: 20 }).notNull().default("PENDING"),
   aiConfidence: numeric("ai_confidence", { precision: 5, scale: 4 }), // 0.0 to 1.0, null for manual
   extractedData: jsonb("extracted_data"),
@@ -607,11 +646,28 @@ export const documentTransactions = pgTable("document_transactions", {
   netAmount: numeric("net_amount", { precision: 18, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("AED"),
   merchantName: varchar("merchant_name", { length: 255 }).notNull(),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  glAccountId: uuid("gl_account_id").references(() => chartOfAccounts.id), // null when using line-level GL
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Line items for multi-item expenses (document_transactions)
+export const documentTransactionLines = pgTable("document_transaction_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  documentTransactionId: uuid("document_transaction_id")
+    .notNull()
+    .references(() => documentTransactions.id, { onDelete: "cascade" }),
+  description: text("description").notNull().default(""),
+  quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
+  unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
   glAccountId: uuid("gl_account_id")
     .notNull()
     .references(() => chartOfAccounts.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  lineOrder: integer("line_order").notNull().default(0),
 });
 
 // Smart Learning: merchant → GL preference per org

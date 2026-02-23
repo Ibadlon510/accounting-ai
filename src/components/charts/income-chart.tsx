@@ -11,15 +11,15 @@ import {
   Cell,
 } from "recharts";
 
-const data = [
-  { month: "Jan", income: 85000, expenses: -20000 },
-  { month: "Feb", income: 72000, expenses: -15000 },
-  { month: "Mar", income: 95000, expenses: -25000 },
-  { month: "Apr", income: 130000, expenses: -40000 },
-  { month: "May", income: 110000, expenses: -30000 },
-  { month: "Jun", income: 88000, expenses: -18000 },
-  { month: "Jul", income: 65000, expenses: -22000 },
-  { month: "Aug", income: 78000, expenses: -12000 },
+const emptyData = [
+  { month: "Jan", income: 0, expenses: 0 },
+  { month: "Feb", income: 0, expenses: 0 },
+  { month: "Mar", income: 0, expenses: 0 },
+  { month: "Apr", income: 0, expenses: 0 },
+  { month: "May", income: 0, expenses: 0 },
+  { month: "Jun", income: 0, expenses: 0 },
+  { month: "Jul", income: 0, expenses: 0 },
+  { month: "Aug", income: 0, expenses: 0 },
 ];
 
 interface CustomTooltipProps {
@@ -47,10 +47,15 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   return null;
 }
 
-export function IncomeChart() {
+interface IncomeChartProps {
+  data?: Array<{ month: string; income: number; expenses: number }>;
+}
+
+export function IncomeChart({ data }: IncomeChartProps) {
+  const chartData = data && data.length > 0 ? data : emptyData;
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} barGap={2}>
+      <BarChart data={chartData} barGap={2}>
         <CartesianGrid
           strokeDasharray="none"
           stroke="var(--border-subtle)"
@@ -77,7 +82,7 @@ export function IncomeChart() {
         />
         <Tooltip content={<CustomTooltip />} cursor={false} />
         <Bar dataKey="income" radius={[3, 3, 0, 0]} maxBarSize={18}>
-          {data.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell
               key={`cell-income-${index}`}
               fill={index === 3 ? "#EF4444" : "#22C55E"}
@@ -86,7 +91,7 @@ export function IncomeChart() {
           ))}
         </Bar>
         <Bar dataKey="expenses" radius={[0, 0, 3, 3]} maxBarSize={18}>
-          {data.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell
               key={`cell-expense-${index}`}
               fill={index === 3 ? "#EF4444" : "#22C55E"}

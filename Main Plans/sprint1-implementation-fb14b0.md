@@ -1,6 +1,6 @@
 # Sprint 1: Foundation Implementation Plan
 
-Replicate the Finsera dashboard design pixel-for-pixel as the UI foundation for the AI Accounting SaaS, with full auth, Supabase backend, and design system.
+Replicate the Finsera dashboard design pixel-for-pixel as the UI foundation for the AI Accounting SaaS, with full auth, Render PostgreSQL backend, and design system.
 
 ---
 
@@ -86,7 +86,7 @@ npx create-next-app@latest accounting-ai --typescript --tailwind --eslint --app 
 Dependencies:
 - **UI**: `shadcn/ui`, `lucide-react`, `framer-motion`, `recharts`
 - **DB**: `drizzle-orm`, `drizzle-kit`, `postgres`
-- **Auth**: `@supabase/supabase-js`, `@supabase/ssr`
+- **Auth**: `next-auth` (v5)
 - **State**: `zustand`, `@tanstack/react-query`
 - **Utils**: `clsx`, `tailwind-merge`, `date-fns`, `zod`
 
@@ -205,13 +205,13 @@ Home, Accounting (active), Sales, Purchases, Banking, Reports, Settings — as i
 
 ---
 
-## Step 4: Supabase + Auth
+## Step 4: Auth (NextAuth.js)
 
 ### Setup
-- Supabase project creation guide for user
-- `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- Server + browser client helpers
-- Middleware for route protection
+- NextAuth.js v5 with Credentials (email/password + bcrypt) and Google OAuth providers
+- `.env.local` with `AUTH_SECRET`, `AUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- JWT session strategy (no DB adapter needed)
+- Middleware for route protection using NextAuth `auth()` wrapper
 
 ### Auth Pages (styled to match brand — clean, minimal)
 - `/login` — email/password
@@ -225,7 +225,7 @@ users            (id, auth_id, email, full_name, role_title, avatar_url)
 user_roles       (id, user_id, organization_id, role)
 audit_logs       (id, organization_id, user_id, action, entity, entity_id, metadata, created_at)
 ```
-+ RLS policies on all tables using `organization_id`
++ Application-level tenant isolation via `organization_id` checks
 
 ---
 
@@ -263,11 +263,11 @@ All cards populated with **realistic mock data** (UAE context: AED amounts, UAE-
     /ui/       (shadcn primitives: button, input, avatar, badge, checkbox, radio-group, label, scroll-area, etc.)
     /feedback/ (toast, alert, dialog)
   /lib
-    /supabase/ (client.ts, server.ts, middleware.ts)
+    /auth/     (config.ts, helpers.ts, index.ts)
     /db/       (schema.ts, index.ts)
     /utils.ts
   /hooks/   (use-auth, use-organization)
-  /providers/ (theme, query, supabase)
+  /providers/ (theme, query, auth-session)
 ```
 
 ---
@@ -279,6 +279,6 @@ All cards populated with **realistic mock data** (UAE context: AED amounts, UAE-
 3. **App shell** — top nav with frosted center nav, profile, breadcrumbs
 4. **Dashboard page** — pixel-match of Finsera screenshot with mock data
 5. **AI Assistant panel** — floating dark glass with suggestion chips + input
-6. **Supabase** connected with RLS on foundation tables
+6. **PostgreSQL** connected with Drizzle ORM on foundation tables
 7. **Dark/light mode** ready (CSS variables)
 8. **All reusable components** built and consistent per design system

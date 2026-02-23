@@ -1,23 +1,30 @@
 "use client";
 
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { PageHeader } from "@/components/layout/page-header";
-import { mockItems } from "@/lib/mock/inventory-data";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { comingSoon } from "@/lib/utils/toast-helpers";
 
+type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure: string; costPrice: number; quantityOnHand: number; isActive: boolean; totalValue: number };
+
 export default function InventoryValuationPage() {
-  const products = mockItems.filter((i) => i.type === "product" && i.isActive);
+  const [allItems, setAllItems] = useState<Item[]>([]);
+
+  useEffect(() => {
+    fetch("/api/inventory")
+      .then((r) => r.ok ? r.json() : { items: [] })
+      .then((d) => setAllItems((d.items ?? []).map((i: Item) => ({ ...i, totalValue: i.quantityOnHand * i.costPrice }))))
+      .catch(() => {});
+  }, []);
+
+  const products = allItems.filter((i) => i.type === "product" && i.isActive);
   const totalValue = products.reduce((s, i) => s + i.totalValue, 0);
   const totalUnits = products.reduce((s, i) => s + i.quantityOnHand, 0);
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "Workspaces", href: "/workspaces" }, { label: "Reports", href: "/reports" }, { label: "Inventory Valuation" }]} />
-      <div className="flex items-center justify-between">
-        <PageHeader title="Inventory Valuation Report" showActions={false} />
+      <div className="mb-6 flex items-center justify-end">
         <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
           <Download className="h-3.5 w-3.5" /> Export PDF
         </Button>
