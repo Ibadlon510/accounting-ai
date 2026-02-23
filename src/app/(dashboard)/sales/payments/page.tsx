@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Plus } from "lucide-react";
@@ -15,7 +15,7 @@ type InvoiceLine = { id: string; description: string; quantity: number; unitPric
 type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
 type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
 
-export default function PaymentsReceivedPage() {
+function PaymentsReceivedContent() {
   const searchParams = useSearchParams();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -165,5 +165,13 @@ export default function PaymentsReceivedPage() {
         ))}
       </div>
     </>
+  );
+}
+
+export default function PaymentsReceivedPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[200px] items-center justify-center text-text-meta">Loading…</div>}>
+      <PaymentsReceivedContent />
+    </Suspense>
   );
 }
