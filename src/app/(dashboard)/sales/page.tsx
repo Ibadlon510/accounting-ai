@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { formatNumber } from "@/lib/accounting/engine";
 import {
   Users, FileText, AlertTriangle, LayoutDashboard, Settings,
-  TrendingUp, TrendingDown, RefreshCw, Sparkles, X,
+  TrendingUp, TrendingDown, RefreshCw, Sparkles, X, Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SalesDashboard } from "@/components/dashboard/variants/sales-dashboard";
+import { CreateInvoicePanel } from "@/components/modals/create-invoice-panel";
 import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
@@ -22,12 +23,28 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+type Customer = { id: string; name: string; email: string; phone: string; isActive: boolean };
+type InvoiceLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
+
 export default function SalesPage() {
   const [showCustomize, setShowCustomize] = useState(false);
   const [dismissedInsight, setDismissedInsight] = useState(false);
+  const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const { isVisible } = useDashboardPillPreferences("sales");
 
-  const { data: dashboardData } = useQuery({
+  function loadCustomers() {
+    fetch("/api/sales/customers", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { customers: [] }))
+      .then((d) => setCustomers(d.customers ?? []))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  const { data: dashboardData, refetch: refetchDashboard } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: () => fetchJson<DashboardStats>("/api/dashboard/stats"),
   });
@@ -94,6 +111,30 @@ export default function SalesPage() {
     },
   ];
 
+  async function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number }) {
+    const res = await fetch("/api/sales/invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: data.customerId,
+        issueDate: data.issueDate,
+        dueDate: data.dueDate,
+        lines: data.lines.map((l) => ({ productId: l.productId, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, taxRate: l.taxRate, taxAmount: l.taxAmount })),
+        subtotal: data.subtotal,
+        taxAmount: data.taxAmount,
+        total: data.total,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const { showError } = await import("@/lib/utils/toast-helpers");
+      showError(json.error ?? "Failed to create invoice");
+      throw new Error(json.error ?? "Failed to create invoice");
+    }
+    setCreateInvoiceOpen(false);
+    refetchDashboard();
+  }
+
   // ── AI insight text (contextual) ──────────────────────────────────
   const insightText = stats.overdueAmount > 0
     ? `${stats.invoiceCount > 0 ? Math.round((stats.overdueAmount / stats.totalRevenue) * 100) : 0}% of revenue is overdue — AED ${formatNumber(stats.overdueAmount)} needs follow-up`
@@ -155,16 +196,26 @@ export default function SalesPage() {
               <h2 className="text-[15px] font-semibold text-text-primary">Dashboard</h2>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCustomize(!showCustomize)}
-            className="rounded-xl text-[12px]"
-          >
-            <Settings className="h-3.5 w-3.5 mr-1.5" />
-            {showCustomize ? "Back" : "Customize"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setCreateInvoiceOpen(true)}
+              className="h-9 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              Create invoice
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCustomize(!showCustomize)}
+              className="rounded-xl text-[12px]"
+            >
+              <Settings className="h-3.5 w-3.5 mr-1.5" />
+              {showCustomize ? "Back" : "Customize"}
+            </Button>
+          </div>
         </div>
+        <CreateInvoicePanel open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen} customers={customers} onCustomerCreated={loadCustomers} onCreate={handleCreateInvoice} />
 
         {showCustomize ? (
           <div className="dashboard-card">

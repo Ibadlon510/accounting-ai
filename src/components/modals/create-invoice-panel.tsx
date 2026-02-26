@@ -22,6 +22,7 @@ import { formatNumber } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
 import { ProductSelect, getProductPrice } from "@/components/documents/product-select";
+import { ContactSelect } from "@/components/documents/contact-select";
 type Customer = { id: string; name: string; email: string; phone: string; isActive: boolean };
 type InvoiceLine = { id: string; productId: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 
@@ -29,6 +30,7 @@ interface CreateInvoicePanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customers: Customer[];
+  onCustomerCreated?: (customer: { id: string; name: string }) => void;
   onCreate: (invoice: {
     customerId: string;
     customerName: string;
@@ -45,7 +47,7 @@ function emptyLine(): InvoiceLine {
   return { id: `new-${Date.now()}-${Math.random()}`, productId: "", description: "", quantity: 1, unitPrice: 0, amount: 0, taxRate: 5, taxAmount: 0 };
 }
 
-export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: CreateInvoicePanelProps) {
+export function CreateInvoicePanel({ open, onOpenChange, customers, onCustomerCreated, onCreate }: CreateInvoicePanelProps) {
   const [customerId, setCustomerId] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState(() => {
@@ -101,7 +103,6 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
 
   async function handleSave() {
     if (!customerId) { showError("Select a customer"); return; }
-    if (lines.some((l) => !l.productId)) { showError("Select a product for each line"); return; }
     if (subtotal <= 0) { showError("Invoice total must be greater than zero"); return; }
     const customer = customers.find((c) => c.id === customerId);
     try {
@@ -133,15 +134,15 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
             <div className="mb-6 grid grid-cols-3 gap-4">
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Customer</Label>
-                <StyledSelect
+                <ContactSelect
+                  type="customer"
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  <option value="">Select customer</option>
-                  {customers.filter((c) => c.isActive).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </StyledSelect>
+                  onChange={setCustomerId}
+                  contacts={customers.map((c) => ({ id: c.id, name: c.name, email: c.email, isActive: c.isActive }))}
+                  onContactCreated={(contact) => onCustomerCreated?.(contact)}
+                  placeholder="Select customer"
+                  className="h-9"
+                />
               </div>
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Issue Date</Label>
@@ -265,7 +266,7 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCreate }: 
           onCancel={() => { reset(); onOpenChange(false); }}
           onSave={handleSave}
           saveLabel="Create Invoice"
-          saveDisabled={!customerId || subtotal <= 0 || lines.some((l) => !l.productId)}
+          saveDisabled={!customerId || subtotal <= 0}
         />
       </EntityPanelContent>
     </EntityPanel>

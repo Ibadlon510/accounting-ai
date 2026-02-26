@@ -41,9 +41,13 @@ export default function InvoicesPage() {
     fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
   }
 
+  function loadCustomers() {
+    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+  }
+
   useEffect(() => {
     loadInvoices();
-    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+    loadCustomers();
     fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch(() => {});
   }, []);
 
@@ -87,7 +91,7 @@ export default function InvoicesPage() {
         <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> New Invoice
         </Button>
-        <CreateInvoicePanel open={createOpen} onOpenChange={setCreateOpen} customers={customers} onCreate={handleCreateInvoice} />
+        <CreateInvoicePanel open={createOpen} onOpenChange={setCreateOpen} customers={customers} onCustomerCreated={loadCustomers} onCreate={handleCreateInvoice} />
         <ViewInvoicePanel
           open={!!viewingId}
           onOpenChange={(o) => !o && setViewingId(null)}

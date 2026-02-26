@@ -28,7 +28,7 @@ type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure
 interface AddItemPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (item: Omit<Item, "id" | "totalValue">) => void | Promise<void>;
+  onCreate: (item: Omit<Item, "id" | "totalValue"> & { sku?: string }) => void | Promise<void>;
 }
 
 export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps) {
@@ -50,7 +50,6 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
 
   async function handleSave() {
     if (!name.trim()) { showError("Item name is required"); return; }
-    if (!sku.trim()) { showError("SKU is required"); return; }
 
     const sp = Number(salesPrice) || 0;
     const pp = Number(purchasePrice) || 0;
@@ -60,7 +59,7 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
     try {
       await onCreate({
         name: name.trim(),
-        sku: sku.trim().toUpperCase(),
+        sku: sku.trim() ? sku.trim().toUpperCase() : undefined,
         type,
         unitOfMeasure: unit,
         salesPrice: sp,
@@ -72,7 +71,7 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
         trackInventory: type === "product",
         isActive: true,
       });
-      showSuccess("Item created", `${name.trim()} (${sku.trim().toUpperCase()}) has been added to inventory.`);
+      showSuccess("Item created", sku.trim() ? `${name.trim()} (${sku.trim().toUpperCase()}) has been added to inventory.` : `${name.trim()} has been added to inventory.`);
       reset();
       onOpenChange(false);
     } catch {
@@ -163,7 +162,7 @@ export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps
           onCancel={() => { reset(); onOpenChange(false); }}
           onSave={handleSave}
           saveLabel="Create Item"
-          saveDisabled={!name.trim() || !sku.trim()}
+          saveDisabled={!name.trim()}
         />
       </EntityPanelContent>
     </EntityPanel>

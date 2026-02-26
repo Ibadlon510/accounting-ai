@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CreateContactModal } from "./create-contact-modal";
-import type { Customer, Supplier } from "./verify-types";
+import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
+import { AddSupplierPanel } from "@/components/modals/add-supplier-modal";
 
 type ContactType = "customer" | "supplier";
 
@@ -145,6 +145,7 @@ export function ContactSelect({
               <button
                 type="button"
                 onClick={() => {
+                  setOpen(false);
                   setCreateOpen(true);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-success hover:bg-success/5"
@@ -157,15 +158,25 @@ export function ContactSelect({
         )}
       </div>
 
-      <CreateContactModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        type={type}
-        onCreated={(contact) => {
-          onContactCreated(contact);
-          onChange(contact.id);
-        }}
-      />
+      {type === "customer" ? (
+        <AddCustomerPanel
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onAdd={(customer) => {
+            onContactCreated({ id: customer.id, name: customer.name });
+            onChange(customer.id);
+          }}
+        />
+      ) : (
+        <AddSupplierPanel
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onAdd={(supplier) => {
+            onContactCreated({ id: supplier.id, name: supplier.name });
+            onChange(supplier.id);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -10,6 +10,7 @@
     "seed": "tsx src/lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:deploy": "drizzle-kit migrate",
     "db:migrate:0005": "tsx scripts/run-migration-0005.ts",
     "db:migrate:0006": "tsx scripts/run-migration-0006.ts",
     "db:push": "drizzle-kit push"

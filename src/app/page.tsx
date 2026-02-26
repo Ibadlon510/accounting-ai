@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import LandingPage from "./(marketing)/landing/page";
 
-export default async function Home() {
-  redirect("/landing");
+export default function Home() {
+  return <LandingPage />;
 }

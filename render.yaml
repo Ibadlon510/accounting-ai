@@ -12,7 +12,7 @@ services:
     region: oregon
     plan: free
 
-    buildCommand: npm install && npm run build && npx drizzle-kit migrate && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
+    buildCommand: npm install && npm run db:migrate:deploy && npm run build && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
     startCommand: node .next/standalone/server.js
 
     envVars:

@@ -773,7 +773,9 @@ async function seedInventory(ctx: SeedContext): Promise<void> {
   if (existingItems.length > 0) {
     itemIds = (await db.select({ id: items.id }).from(items).where(eq(items.organizationId, organizationId))).map((i) => i.id);
   } else {
-    const itemRows = await db
+    // Insert products and services separately so each batch has a consistent column set.
+    // Mixing rows with/without inventory fields in one batch can cause Drizzle parameter issues.
+    const productRows = await db
       .insert(items)
       .values([
         { organizationId, name: "Dell Monitor 27\" 4K", sku: "MON-D27-4K", type: "product", unitOfMeasure: "pcs", salesPrice: "1800", purchasePrice: "1200", costPrice: "1200", quantityOnHand: "15", reorderLevel: "5", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true, isDemo: true },
@@ -781,11 +783,17 @@ async function seedInventory(ctx: SeedContext): Promise<void> {
         { organizationId, name: "Cat6 Network Cable (305m)", sku: "CBL-CAT6-305", type: "product", unitOfMeasure: "box", salesPrice: "450", purchasePrice: "280", costPrice: "280", quantityOnHand: "8", reorderLevel: "3", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true, isDemo: true },
         { organizationId, name: "HP LaserJet Pro Printer", sku: "PRN-HP-LJ", type: "product", unitOfMeasure: "pcs", salesPrice: "2200", purchasePrice: "1500", costPrice: "1500", quantityOnHand: "3", reorderLevel: "2", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true, isDemo: true },
         { organizationId, name: "A4 Copy Paper (Ream)", sku: "PPR-A4-500", type: "product", unitOfMeasure: "ream", salesPrice: "30", purchasePrice: "22", costPrice: "22", quantityOnHand: "200", reorderLevel: "50", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true, isDemo: true },
-        { organizationId, name: "IT Consulting (Hourly)", sku: "SVC-IT-HR", type: "service", unitOfMeasure: "hour", salesPrice: "500", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false, isDemo: true },
-        { organizationId, name: "System Audit Package", sku: "SVC-AUDIT", type: "service", unitOfMeasure: "unit", salesPrice: "15000", costPrice: "0", taxCode: "VAT5", salesAccountId, purchaseAccountId, trackInventory: false, isDemo: true },
         { organizationId, name: "Wireless Mouse", sku: "MSE-WL-01", type: "product", unitOfMeasure: "pcs", salesPrice: "180", purchasePrice: "95", costPrice: "95", quantityOnHand: "2", reorderLevel: "10", taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId, trackInventory: true, isDemo: true },
       ])
       .returning({ id: items.id });
+    const serviceRows = await db
+      .insert(items)
+      .values([
+        { organizationId, name: "IT Consulting (Hourly)", sku: "SVC-IT-HR", type: "service", unitOfMeasure: "hour", salesPrice: "500", purchasePrice: "0", costPrice: "0", quantityOnHand: "0", reorderLevel: null, taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId: null, trackInventory: false, isDemo: true },
+        { organizationId, name: "System Audit Package", sku: "SVC-AUDIT", type: "service", unitOfMeasure: "unit", salesPrice: "15000", purchasePrice: "0", costPrice: "0", quantityOnHand: "0", reorderLevel: null, taxCode: "VAT5", salesAccountId, purchaseAccountId, inventoryAccountId: null, trackInventory: false, isDemo: true },
+      ])
+      .returning({ id: items.id });
+    const itemRows = [...productRows, ...serviceRows];
     itemIds = itemRows.map((r) => r.id);
   }
   console.log("Items:", itemIds.length);
@@ -991,13 +999,40 @@ export async function removeDemoDataOnly(organizationId: string): Promise<void> 
   }
   await db.delete(journalEntries).where(and(eq(journalEntries.organizationId, organizationId), eq(journalEntries.isDemo, true)));
   await db.delete(payments).where(and(eq(payments.organizationId, organizationId), eq(payments.isDemo, true)));
-  // Delete invoices/bills BEFORE documents (invoices/bills FK → documents with onDelete: set null)
-  await db.delete(invoices).where(and(eq(invoices.organizationId, organizationId), eq(invoices.isDemo, true)));
-  await db.delete(bills).where(and(eq(bills.organizationId, organizationId), eq(bills.isDemo, true)));
+  // Delete invoices/bills and their dependents by demo entity IDs so FKs are cleared (in case is_demo missing on some rows).
+  const demoCustomerIds = (await db.select({ id: customers.id }).from(customers).where(and(eq(customers.organizationId, organizationId), eq(customers.isDemo, true)))).map((c) => c.id);
+  const demoSupplierIds = (await db.select({ id: suppliers.id }).from(suppliers).where(and(eq(suppliers.organizationId, organizationId), eq(suppliers.isDemo, true)))).map((s) => s.id);
+  if (demoCustomerIds.length > 0) {
+    const invIds = (await db.select({ id: invoices.id }).from(invoices).where(inArray(invoices.customerId, demoCustomerIds))).map((i) => i.id);
+    if (invIds.length > 0) {
+      await db.delete(paymentAllocations).where(and(eq(paymentAllocations.documentType, "invoice"), inArray(paymentAllocations.documentId, invIds)));
+      await db.delete(invoiceLines).where(inArray(invoiceLines.invoiceId, invIds));
+    }
+    await db.delete(invoices).where(inArray(invoices.customerId, demoCustomerIds));
+  }
+  if (demoSupplierIds.length > 0) {
+    const billIds = (await db.select({ id: bills.id }).from(bills).where(inArray(bills.supplierId, demoSupplierIds))).map((b) => b.id);
+    if (billIds.length > 0) {
+      await db.delete(paymentAllocations).where(and(eq(paymentAllocations.documentType, "bill"), inArray(paymentAllocations.documentId, billIds)));
+      await db.delete(billLines).where(inArray(billLines.billId, billIds));
+    }
+    await db.delete(bills).where(inArray(bills.supplierId, demoSupplierIds));
+  }
   await db.delete(documents).where(and(eq(documents.organizationId, organizationId), like(documents.s3Key, "demo/%")));
-  await db.delete(bankStatements).where(and(eq(bankStatements.organizationId, organizationId), eq(bankStatements.isDemo, true)));
-  await db.delete(bankTransactions).where(and(eq(bankTransactions.organizationId, organizationId), eq(bankTransactions.isDemo, true)));
-  await db.delete(bankAccounts).where(and(eq(bankAccounts.organizationId, organizationId), eq(bankAccounts.isDemo, true)));
+  // Delete banking data in FK order: transactions and statements reference bank_accounts.
+  // Use demo bank account IDs so we remove all rows pointing at them (in case is_demo was missing on some children).
+  const demoBankAccountIds = (
+    await db.select({ id: bankAccounts.id }).from(bankAccounts).where(and(eq(bankAccounts.organizationId, organizationId), eq(bankAccounts.isDemo, true)))
+  ).map((r) => r.id);
+  if (demoBankAccountIds.length > 0) {
+    await db.delete(bankTransactions).where(inArray(bankTransactions.bankAccountId, demoBankAccountIds));
+    const demoStatementIds = (await db.select({ id: bankStatements.id }).from(bankStatements).where(inArray(bankStatements.bankAccountId, demoBankAccountIds))).map((s) => s.id);
+    if (demoStatementIds.length > 0) {
+      await db.delete(bankStatementLines).where(inArray(bankStatementLines.bankStatementId, demoStatementIds));
+    }
+    await db.delete(bankStatements).where(inArray(bankStatements.bankAccountId, demoBankAccountIds));
+    await db.delete(bankAccounts).where(inArray(bankAccounts.id, demoBankAccountIds));
+  }
   await db.delete(items).where(and(eq(items.organizationId, organizationId), eq(items.isDemo, true)));
   await db.delete(customers).where(and(eq(customers.organizationId, organizationId), eq(customers.isDemo, true)));
   await db.delete(suppliers).where(and(eq(suppliers.organizationId, organizationId), eq(suppliers.isDemo, true)));
