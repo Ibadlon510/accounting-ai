@@ -28,7 +28,7 @@ type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure
 interface AddItemPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (item: Omit<Item, "id" | "totalValue"> & { sku?: string }) => void | Promise<void>;
+  onCreate: (item: Omit<Item, "id" | "totalValue" | "sku"> & { sku?: string }) => void | Promise<void>;
 }
 
 export function AddItemPanel({ open, onOpenChange, onCreate }: AddItemPanelProps) {
