@@ -119,29 +119,30 @@ export function VerifyExpenseForm({
             required
           />
         </SmartField>
-        <SmartField label="Merchant Name" confidence={fieldConfidence("merchantName")}>
-          <Input
-            value={form.merchantName}
-            onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))}
-            placeholder="e.g. Starbucks"
-            className="h-9 rounded-lg border-border-subtle text-[13px]"
-            required
-          />
-        </SmartField>
         <div>
           <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">
-            Supplier <span className="font-normal text-text-meta">(optional)</span>
+            Supplier
           </Label>
           <ContactSelect
             type="supplier"
             value={form.supplierId}
-            onChange={(id) => setForm((f) => ({ ...f, supplierId: id }))}
-            contacts={suppliers}
-            onContactCreated={(contact) =>
-              setSuppliers((prev) => [...prev, { ...contact, email: "", phone: "", isActive: true }])
+            onChange={(id) =>
+              setForm((f) => ({
+                ...f,
+                supplierId: id,
+                merchantName: suppliers.find((s) => s.id === id)?.name ?? f.merchantName,
+              }))
             }
-            placeholder="None"
-            allowEmpty
+            contacts={suppliers}
+            onContactCreated={(contact) => {
+              setSuppliers((prev) => [...prev, { ...contact, email: "", phone: "", isActive: true }]);
+              setForm((f) => ({
+                ...f,
+                supplierId: contact.id,
+                merchantName: contact.name ?? f.merchantName,
+              }));
+            }}
+            placeholder="Select supplier"
           />
         </div>
         <SmartField label="Currency" confidence={fieldConfidence("currency")}>
@@ -298,6 +299,7 @@ export function VerifyExpenseForm({
             disabled={
               saving ||
               subtotal <= 0 ||
+              !form.supplierId ||
               form.lines.some((l) => !l.productId || !l.glAccountId)
             }
             className="gap-2 rounded-xl bg-success px-6 text-[13px] font-semibold text-white hover:bg-success/90"

@@ -259,7 +259,7 @@ export default function DocumentVerifyPage() {
               ...f,
               date: invDate,
               currency: extracted.invoice?.currency ?? f.currency,
-              merchantName: merchant || f.merchantName,
+              merchantName: suppMatch?.name ?? merchant || f.merchantName,
               supplierId: suppMatch?.id ?? f.supplierId,
               lines: [expenseLineFromExtracted(extracted, glId)],
             }));
@@ -405,8 +405,9 @@ export default function DocumentVerifyPage() {
     const subtotal = expenseForm.lines.reduce((s, l) => s + l.amount, 0);
     const taxAmount = expenseForm.lines.reduce((s, l) => s + l.taxAmount, 0);
     const total = subtotal + taxAmount;
-    if (!expenseForm.merchantName.trim() || expenseForm.lines.some((l) => !l.glAccountId || !l.description.trim())) return;
-    const merchantName = expenseForm.merchantName.trim();
+    const supplier = suppliers.find((s) => s.id === expenseForm.supplierId);
+    if (!supplier || expenseForm.lines.some((l) => !l.glAccountId || !l.description.trim())) return;
+    const merchantName = supplier.name.trim();
     const firstGl = expenseForm.lines[0]?.glAccountId ?? "";
     const glChanged = initialGlRef.current && firstGl !== initialGlRef.current;
     setSaving(true);
@@ -692,7 +693,7 @@ export default function DocumentVerifyPage() {
               ...f,
               date: invDate,
               currency: extracted.invoice?.currency ?? f.currency,
-              merchantName: merchant || f.merchantName,
+              merchantName: suppMatch?.name ?? merchant || f.merchantName,
               supplierId: suppMatch?.id ?? f.supplierId,
               lines: [expenseLineFromExtracted(extracted, glId)],
             }));
@@ -882,7 +883,7 @@ export default function DocumentVerifyPage() {
                   <>
                     {useExpenseForm && (
                       <>
-                        <WorkflowPreview {...workflowProps} summary={`Will create expense entry (${expenseForm.lines.length} line${expenseForm.lines.length !== 1 ? "s" : ""}) for ${expenseForm.merchantName || "merchant"}, post to GL.`} nextStep="View in General Ledger" nextStepHref="/accounting/general-ledger" />
+                        <WorkflowPreview {...workflowProps} summary={`Will create expense entry (${expenseForm.lines.length} line${expenseForm.lines.length !== 1 ? "s" : ""}) for ${suppliers.find((s) => s.id === expenseForm.supplierId)?.name ?? "supplier"}, post to GL.`} nextStep="View in General Ledger" nextStepHref="/accounting/general-ledger" />
                         <VerifyExpenseForm
                           form={expenseForm}
                           setForm={setExpenseForm}
