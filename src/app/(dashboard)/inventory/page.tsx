@@ -69,7 +69,7 @@ export default function InventoryPage() {
     lowStock: items.filter((i) => i.type === "product" && i.trackInventory && i.quantityOnHand <= i.reorderLevel).length,
   };
 
-  async function handleCreate(data: Omit<Item, "id" | "totalValue"> & { sku?: string }) {
+  async function handleCreate(data: Omit<Item, "id" | "totalValue" | "sku"> & { sku?: string }) {
     const res = await fetch("/api/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
