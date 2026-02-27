@@ -29,6 +29,6 @@ services:
       # AUTH_URL must be set manually in Dashboard after first deploy:
       # e.g. https://accounting-ai.onrender.com
       - key: AUTH_URL
-        value: "https://accounting-ai-u6xe.onrender.com"
+        value: "https://accounting-ai-iy56.onrender.com"
       # Also set in Render Dashboard: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
       # GOOGLE_GEMINI_API_KEY, OPENAI_API_KEY, RESEND_API_KEY, AWS_* keys
