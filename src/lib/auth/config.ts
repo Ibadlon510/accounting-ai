@@ -2,6 +2,24 @@ import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      name?: string | null;
+      image?: string | null;
+      emailVerified?: Date | null;
+    };
+  }
+  interface User {
+    emailVerified?: Date | null;
+  }
+}
+
+
+const UNVERIFIED_SESSION_SECONDS = 5 * 60; // 5 minutes
+
 /**
  * Auth config — NO adapter, NO static DB imports.
  * Safe to evaluate at build time and in Edge middleware.
@@ -55,6 +73,7 @@ export const authConfig: NextAuthConfig = {
           email: user.email,
           name: user.name,
           image: user.image ?? user.avatarUrl,
+          emailVerified: user.emailVerified ?? null,
         };
       },
     }),
@@ -68,7 +87,7 @@ export const authConfig: NextAuthConfig = {
         const { eq } = await import("drizzle-orm");
 
         const [existing] = await db
-          .select({ id: users.id })
+          .select({ id: users.id, emailVerified: users.emailVerified })
           .from(users)
           .where(eq(users.email, user.email))
           .limit(1);
@@ -85,23 +104,70 @@ export const authConfig: NextAuthConfig = {
             .returning({ id: users.id });
           if (created) {
             user.id = created.id;
+            user.emailVerified = new Date();
           }
         } else {
           user.id = existing.id;
+          user.emailVerified = existing.emailVerified ?? null;
         }
       }
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         token.id = user.id;
+        token.emailVerified = user.emailVerified ?? null;
       }
+
+      // For Google OAuth: always resolve the DB UUID (not the Google sub ID)
+      // This ensures both new and returning Google users get the correct DB id
+      if (account?.provider === "google" && user?.email) {
+        const { db } = await import("@/lib/db");
+        const { users } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const [dbUser] = await db
+          .select({ id: users.id, emailVerified: users.emailVerified })
+          .from(users)
+          .where(eq(users.email, user.email))
+          .limit(1);
+
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.emailVerified = (dbUser.emailVerified ?? null) as Date | null;
+        }
+      }
+
+      // On session update (e.g. after email verification), re-fetch emailVerified from DB
+      if (trigger === "update" && token.id) {
+        const { db } = await import("@/lib/db");
+        const { users } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const userId = token.id as string;
+
+        const [fresh] = await db
+          .select({ emailVerified: users.emailVerified })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        if (fresh) {
+          token.emailVerified = (fresh.emailVerified ?? null) as Date | null;
+        }
+      }
+
+      // Unverified users get a 5-minute session TTL as pressure to verify
+      if (!token.emailVerified) {
+        token.exp = Math.floor(Date.now() / 1000) + UNVERIFIED_SESSION_SECONDS;
+      }
+
       return token;
     },
     async session({ session, token }) {
       if (token?.id) {
         session.user.id = token.id as string;
       }
+      session.user.emailVerified = (token.emailVerified as Date | null | undefined) ?? null;
       return session;
     },
   },

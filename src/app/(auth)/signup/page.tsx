@@ -6,12 +6,17 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Loader2 } from "lucide-react";
+import { AuthMobileLogo } from "@/components/auth/auth-mobile-logo";
+import { PasswordInput } from "@/components/auth/password-input";
+import { PasswordStrengthBar } from "@/components/auth/password-strength-bar";
 
 export default function SignupPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,9 +27,18 @@ export default function SignupPage() {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
     setLoading(true);
 
-    // Register the user via API
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,11 +48,7 @@ export default function SignupPage() {
     let data: { error?: string; ok?: boolean; userId?: string } = {};
     const text = await res.text();
     if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        // Non-JSON response (e.g. error page)
-      }
+      try { data = JSON.parse(text); } catch { /* non-JSON */ }
     }
     if (!res.ok) {
       setError(data.error ?? "Failed to create account");
@@ -46,7 +56,6 @@ export default function SignupPage() {
       return;
     }
 
-    // Auto-login after registration
     const result = await signIn("credentials", {
       email,
       password,
@@ -65,26 +74,7 @@ export default function SignupPage() {
 
   return (
     <div>
-      {/* Mobile logo */}
-      <div className="mb-8 flex items-center gap-2 lg:hidden">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-orange-500">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="h-5 w-5 text-white"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
-          </svg>
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[17px] font-bold text-text-primary">Agar</span>
-          <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
-        </div>
-      </div>
+      <AuthMobileLogo />
 
       <h1 className="text-[24px] font-bold text-text-primary">
         Create your account
@@ -125,6 +115,7 @@ export default function SignupPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
+            autoFocus
             className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] placeholder:text-text-meta focus-visible:ring-text-primary/20"
           />
         </div>
@@ -145,8 +136,7 @@ export default function SignupPage() {
           <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
             Password
           </label>
-          <Input
-            type="password"
+          <PasswordInput
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -154,6 +144,22 @@ export default function SignupPage() {
             minLength={8}
             className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] placeholder:text-text-meta focus-visible:ring-text-primary/20"
           />
+          <PasswordStrengthBar password={password} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[13px] font-medium text-text-primary">
+            Confirm Password
+          </label>
+          <PasswordInput
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] placeholder:text-text-meta focus-visible:ring-text-primary/20"
+          />
+          {confirmPassword && password !== confirmPassword && (
+            <p className="mt-1 text-[11px] text-error">Passwords do not match</p>
+          )}
         </div>
 
         {error && <p className="text-[13px] text-error">{error}</p>}
@@ -161,8 +167,9 @@ export default function SignupPage() {
         <Button
           type="submit"
           disabled={loading}
-          className="h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
+          className="h-11 w-full gap-2 rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
         >
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {loading ? "Creating account..." : "Create account"}
         </Button>
       </form>

@@ -1,22 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
+import { AuthMobileLogo } from "@/components/auth/auth-mobile-logo";
+import { PasswordInput } from "@/components/auth/password-input";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get("error");
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const authErrorMessage =
+    urlError === "link_expired"
+      ? "Your verification link has expired. Please sign in and resend."
+      : urlError === "invalid_link"
+      ? "Invalid verification link. Please sign in and resend."
+      : null;
+
   async function handleGoogleLogin() {
-    await signIn("google", { callbackUrl: "/dashboard" });
+    await signIn("google", { callbackUrl });
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -36,32 +56,13 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(callbackUrl);
     router.refresh();
   }
 
   return (
     <div>
-      {/* Mobile logo */}
-      <div className="mb-8 flex items-center gap-2 lg:hidden">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-orange-500">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="h-5 w-5 text-white"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
-          </svg>
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[17px] font-bold text-text-primary">Agar</span>
-          <span className="text-[12px] font-medium text-text-secondary">Smart Accounting</span>
-        </div>
-      </div>
+      <AuthMobileLogo />
 
       <h1 className="text-[24px] font-bold text-text-primary">Welcome back</h1>
       <p className="mt-1 text-[14px] text-text-secondary">
@@ -107,6 +108,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoFocus
             className="h-11 rounded-xl border-border-subtle bg-transparent text-[14px] placeholder:text-text-meta focus-visible:ring-text-primary/20"
           />
         </div>
@@ -122,8 +124,7 @@ export default function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <Input
-            type="password"
+          <PasswordInput
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -132,6 +133,12 @@ export default function LoginPage() {
           />
         </div>
 
+        {authErrorMessage && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-[13px] text-amber-800">{authErrorMessage}</p>
+          </div>
+        )}
+
         {error && (
           <p className="text-[13px] text-error">{error}</p>
         )}
@@ -139,8 +146,9 @@ export default function LoginPage() {
         <Button
           type="submit"
           disabled={loading}
-          className="h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
+          className="h-11 w-full gap-2 rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
         >
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {loading ? "Signing in..." : "Sign in"}
         </Button>
       </form>

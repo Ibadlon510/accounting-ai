@@ -74,6 +74,27 @@ export async function createOrganizationAndLaunch(formData: {
       path: "/",
     });
 
+    // Fire-and-forget: send verification email if not already verified
+    if (!existingUser.emailVerified) {
+      const { randomBytes, createHash } = await import("crypto");
+      const hashToken = (raw: string) => createHash("sha256").update(raw).digest("hex");
+      const { verificationTokens } = await import("@/lib/db/schema");
+      const { sendVerificationEmail } = await import("@/lib/email/verify-email");
+
+      const identifier = `verify:${existingUser.email}`;
+      await db.delete(verificationTokens).where(eq(verificationTokens.identifier, identifier)).catch(() => {});
+
+      const rawToken = randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db.insert(verificationTokens).values({ identifier, token: hashToken(rawToken), expires }).catch(() => {});
+
+      const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "";
+      const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${rawToken}&email=${encodeURIComponent(existingUser.email)}`;
+
+      sendVerificationEmail({ to: existingUser.email, verifyUrl, name: existingUser.name }).catch(() => {});
+    }
+
     return { ok: true, redirect: "/dashboard" };
   } catch (e: unknown) {
     const err = e as Record<string, unknown>;

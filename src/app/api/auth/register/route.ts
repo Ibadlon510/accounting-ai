@@ -4,6 +4,7 @@ import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { rateLimit, getClientIp } from "@/lib/utils/rate-limit";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -12,6 +13,11 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  if (!rateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "Too many accounts created from this IP. Please try again later." }, { status: 429 });
+  }
+
   try {
     let body: unknown;
     try {

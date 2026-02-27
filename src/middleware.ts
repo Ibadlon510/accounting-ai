@@ -34,6 +34,7 @@ export default auth(async function middleware(request) {
   if (!user && !isPublicPage && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.searchParams.set("callbackUrl", request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
 
