@@ -30,6 +30,6 @@ export function useSetCurrentOrg() {
       body: JSON.stringify({ organizationId }),
     });
     if (!res.ok) throw new Error("Failed to switch organization");
-    window.location.reload(); // Reload so all data refetches with new org
+    window.location.href = "/dashboard"; // Navigate to dashboard with new org context
   }, []);
 }

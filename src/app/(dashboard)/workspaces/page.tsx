@@ -69,7 +69,10 @@ export default function WorkspacesPage() {
   }, []);
 
   const handleOrgClick = async (org: OrgItem) => {
-    if (org.id === currentOrgId) return;
+    if (org.id === currentOrgId) {
+      window.location.href = "/dashboard";
+      return;
+    }
     try {
       await setCurrentOrg(org.id);
     } catch {
