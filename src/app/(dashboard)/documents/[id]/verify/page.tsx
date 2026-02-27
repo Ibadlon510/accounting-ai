@@ -259,7 +259,7 @@ export default function DocumentVerifyPage() {
               ...f,
               date: invDate,
               currency: extracted.invoice?.currency ?? f.currency,
-              merchantName: suppMatch?.name ?? merchant || f.merchantName,
+              merchantName: (suppMatch?.name ?? merchant) || f.merchantName,
               supplierId: suppMatch?.id ?? f.supplierId,
               lines: [expenseLineFromExtracted(extracted, glId)],
             }));
@@ -693,7 +693,7 @@ export default function DocumentVerifyPage() {
               ...f,
               date: invDate,
               currency: extracted.invoice?.currency ?? f.currency,
-              merchantName: suppMatch?.name ?? merchant || f.merchantName,
+              merchantName: (suppMatch?.name ?? merchant) || f.merchantName,
               supplierId: suppMatch?.id ?? f.supplierId,
               lines: [expenseLineFromExtracted(extracted, glId)],
             }));
