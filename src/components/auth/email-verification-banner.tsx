@@ -65,11 +65,15 @@ export function EmailVerificationBanner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: newEmail.trim() }),
       });
-      const data = await res.json() as { ok?: boolean; email?: string; error?: string };
+      const data = await res.json() as { ok?: boolean; email?: string; error?: string; emailSent?: boolean; emailError?: string };
       if (!res.ok) {
         showError("Could not update email", data.error ?? "Please try again.");
       } else {
-        showSuccess("Email updated", `Verification link sent to ${data.email}.`);
+        if (data.emailSent === false) {
+          showError("Email updated but verification email failed to send", data.emailError ?? "Try clicking Resend.");
+        } else {
+          showSuccess("Email updated", `Verification link sent to ${data.email}.`);
+        }
         setChangingEmail(false);
         setNewEmail("");
         // Force session refresh so banner reflects the new email address

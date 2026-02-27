@@ -138,7 +138,7 @@ export const authConfig: NextAuthConfig = {
         }
       }
 
-      // On session update (e.g. after email verification), re-fetch emailVerified from DB
+      // On session update (e.g. after email verification or email change), re-fetch from DB
       if (trigger === "update" && token.id) {
         const { db } = await import("@/lib/db");
         const { users } = await import("@/lib/db/schema");
@@ -146,12 +146,14 @@ export const authConfig: NextAuthConfig = {
         const userId = token.id as string;
 
         const [fresh] = await db
-          .select({ emailVerified: users.emailVerified })
+          .select({ email: users.email, name: users.name, emailVerified: users.emailVerified })
           .from(users)
           .where(eq(users.id, userId))
           .limit(1);
 
         if (fresh) {
+          token.email = fresh.email;
+          token.name = fresh.name;
           token.emailVerified = (fresh.emailVerified ?? null) as Date | null;
         }
       }

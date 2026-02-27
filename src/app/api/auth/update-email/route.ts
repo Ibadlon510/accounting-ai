@@ -104,13 +104,19 @@ export async function POST(request: Request) {
   const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "";
   const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${rawToken}&email=${encodeURIComponent(newEmail)}`;
 
-  await sendVerificationEmail({
+  const emailResult = await sendVerificationEmail({
     to: newEmail,
     verifyUrl,
     name: currentUser.name,
   }).catch((err) => {
     console.error("[update-email] Failed to send verification email:", err);
+    return { ok: false as const, error: String(err) };
   });
 
-  return NextResponse.json({ ok: true, email: newEmail });
+  return NextResponse.json({
+    ok: true,
+    email: newEmail,
+    emailSent: emailResult?.ok ?? false,
+    ...(emailResult && !emailResult.ok ? { emailError: emailResult.error } : {}),
+  });
 }
