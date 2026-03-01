@@ -8,6 +8,7 @@ import { extractInvoiceFromImage } from "@/lib/ai/extract-invoice";
 import { parseBankStatement, extractBankStatementFromImage } from "@/lib/banking/parse-statement";
 import { auditLogs } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
+import { createNotification } from "@/lib/notifications/create";
 
 const BANK_STATEMENT_MIMES = ["text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
@@ -174,6 +175,20 @@ export async function POST(
     entityId: documentId,
     metadata: { confidence: result.confidence, status },
   });
+
+  const merchantName = result.data?.merchant?.name ?? "Document";
+  await createNotification({
+    orgId,
+    userId: userId ?? undefined,
+    category: "documents",
+    title: status === "FLAGGED" ? "Document Needs Review" : "Document Processed",
+    message: status === "FLAGGED"
+      ? `${merchantName} was processed but flagged for review.`
+      : `${merchantName} processed successfully — ready to verify & book.`,
+    icon: "FileText",
+    actionUrl: `/documents/${documentId}/verify`,
+    actionLabel: "Review",
+  }).catch(() => {});
 
   return NextResponse.json({
     ok: true,

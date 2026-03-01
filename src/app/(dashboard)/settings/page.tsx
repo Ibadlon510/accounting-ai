@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { StyledSelect } from "@/components/ui/styled-select";
+import { BillingSettings } from "@/components/settings/billing-settings";
+import { TeamSettings } from "@/components/settings/team-settings";
+import { SecuritySettings } from "@/components/settings/security-settings";
+import { NotificationSettings } from "@/components/settings/notification-settings";
 
 const tabs = [
   { id: "organization", label: "Organization", icon: Building2 },
@@ -76,8 +80,12 @@ export default function SettingsPage() {
         <div className="col-span-9">
           {activeTab === "organization" && <OrganizationSettings />}
           {activeTab === "database" && <DatabaseSettings />}
+          {activeTab === "billing" && <BillingSettings />}
+          {activeTab === "team" && <TeamSettings />}
+          {activeTab === "security" && <SecuritySettings />}
+          {activeTab === "notifications" && <NotificationSettings />}
           {activeTab === "appearance" && <AppearanceSettings />}
-          {activeTab !== "organization" && activeTab !== "database" && activeTab !== "appearance" && (
+          {activeTab !== "organization" && activeTab !== "database" && activeTab !== "billing" && activeTab !== "team" && activeTab !== "security" && activeTab !== "notifications" && activeTab !== "appearance" && (
             <div className="dashboard-card">
               <h2 className="text-[18px] font-semibold text-text-primary">
                 {tabs.find((t) => t.id === activeTab)?.label}

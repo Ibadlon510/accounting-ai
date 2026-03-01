@@ -1,0 +1,393 @@
+/* Agarwood Landing Page Scoped Styles */
+/* These styles are scoped via the .agar-landing wrapper class */
+
+.agar-landing {
+  /* AgarWood Brand Colors — names match Tailwind v4 --color-* tokens */
+  --color-agarwood: #3B2C26;
+  --color-gold: #C6A664;
+  --color-beige: #F5F1EB;
+  --color-dark-brown: #2A1F1A;
+
+  --font-serif: 'Playfair Display', serif;
+
+  background: #FFFFFF;
+  color: var(--color-agarwood);
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography */
+.agar-landing h1, .agar-landing h2, .agar-landing h3,
+.agar-landing h4, .agar-landing h5, .agar-landing h6 {
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.75em;
+  font-weight: 600;
+}
+
+.agar-landing h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.agar-landing h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.agar-landing h3 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.2;
+}
+
+.agar-landing p {
+  margin-bottom: 1.5em;
+  line-height: 1.75;
+  font-size: clamp(1rem, 2vw, 1.125rem);
+}
+
+/* Section spacing */
+.agar-landing section {
+  scroll-margin-top: clamp(6rem, 15vw, 9rem);
+  padding: clamp(3rem, 8vw, 6rem) 0;
+}
+
+.agar-landing section#home {
+  padding: 0;
+  scroll-margin-top: 0;
+}
+
+/* Utilities */
+.agar-landing .full-screen-with-header {
+  min-height: 100vh;
+  padding-top: clamp(8rem, 18vw, 12rem);
+}
+
+.agar-landing .line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agar-landing .line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agar-landing .line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Service card grid */
+.agar-landing .service-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  align-items: stretch;
+}
+
+@media (min-width: 1024px) {
+  .agar-landing .service-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .agar-landing .service-card-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.agar-landing .service-card-container {
+  height: 360px;
+  width: 100%;
+  position: relative;
+  contain: layout style;
+}
+
+.agar-landing .service-card-container.active {
+  z-index: 10;
+  position: relative;
+}
+
+/* Animations */
+@keyframes agar-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.agar-landing .shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.agar-landing .shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(198, 166, 100, 0.2), transparent);
+  animation: agar-shimmer 2s infinite;
+}
+
+/* Glass effect */
+.agar-landing .glass {
+  backdrop-filter: blur(10px);
+  background: rgba(245, 241, 235, 0.8);
+  border: 1px solid rgba(198, 166, 100, 0.2);
+}
+
+/* Glow */
+.agar-landing .glow {
+  box-shadow: 0 0 20px rgba(198, 166, 100, 0.3);
+  transition: box-shadow 0.3s ease-in-out;
+}
+
+.agar-landing .glow:hover {
+  box-shadow: 0 0 30px rgba(198, 166, 100, 0.5);
+}
+
+/* Text gradient */
+.agar-landing .text-gradient {
+  background: linear-gradient(135deg, #3B2C26 0%, #C6A664 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Card hover */
+.agar-landing .card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agar-landing .card-hover:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(59, 44, 38, 0.15);
+}
+
+/* Container */
+.agar-landing .luxury-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 4vw, 3rem);
+  contain: layout;
+}
+
+.agar-landing .luxury-section {
+  padding: clamp(4rem, 8vw, 6rem) 0;
+  contain: layout style;
+}
+
+/* Spacing utilities */
+.agar-landing .spacing-xs { margin: clamp(0.5rem, 1vw, 1rem) 0; }
+.agar-landing .spacing-sm { margin: clamp(1rem, 2vw, 1.5rem) 0; }
+.agar-landing .spacing-md { margin: clamp(1.5rem, 3vw, 2.5rem) 0; }
+.agar-landing .spacing-lg { margin: clamp(2rem, 4vw, 3.5rem) 0; }
+.agar-landing .spacing-xl { margin: clamp(2.5rem, 5vw, 4.5rem) 0; }
+
+/* Header clearance */
+.agar-landing .header-safe-top {
+  padding-top: clamp(8rem, 18vw, 12rem);
+}
+
+/* Wood texture */
+.agar-landing .wood-texture {
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(198, 166, 100, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(198, 166, 100, 0.1) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(59, 44, 38, 0.05) 0%, transparent 25%, rgba(59, 44, 38, 0.05) 50%, transparent 75%);
+}
+
+/* Touch targets */
+.agar-landing .touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .agar-landing section {
+    padding: clamp(2.5rem, 6vw, 4rem) 0;
+  }
+
+  .agar-landing .luxury-container {
+    padding: 0 clamp(1rem, 4vw, 1.5rem);
+  }
+
+  .agar-landing h1 {
+    font-size: clamp(1.75rem, 6vw, 2.25rem);
+    margin-bottom: 1rem;
+    line-height: 1.15;
+  }
+
+  .agar-landing h2 {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+    margin-bottom: 1rem;
+    line-height: 1.2;
+  }
+
+  .agar-landing h3 {
+    font-size: clamp(1.25rem, 4vw, 1.5rem);
+    line-height: 1.25;
+  }
+
+  .agar-landing p {
+    font-size: 0.938rem;
+    line-height: 1.7;
+    margin-bottom: 1rem;
+  }
+}
+
+/* Tablet */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .agar-landing .luxury-container {
+    padding: 0 clamp(1.5rem, 3.5vw, 2.5rem);
+  }
+
+  .agar-landing .luxury-section {
+    padding: clamp(3rem, 8vw, 5rem) 0;
+  }
+
+  .agar-landing .header-safe-top {
+    padding-top: 8rem;
+  }
+
+  .agar-landing h1 {
+    font-size: clamp(2rem, 5vw, 2.75rem);
+  }
+
+  .agar-landing h2 {
+    font-size: clamp(1.75rem, 4.5vw, 2.25rem);
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .agar-landing .header-safe-top {
+    padding-top: 7.5rem;
+  }
+
+  .agar-landing section {
+    scroll-margin-top: 5.5rem;
+  }
+}
+
+/* Scrollbar within landing */
+.agar-landing ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.agar-landing ::-webkit-scrollbar-track {
+  background: var(--color-beige);
+}
+
+.agar-landing ::-webkit-scrollbar-thumb {
+  background: var(--color-gold);
+  border-radius: 4px;
+}
+
+/* Ultrawide containment */
+@media (min-width: 1600px) {
+  .agar-landing .luxury-container {
+    max-width: 1320px;
+  }
+
+  .agar-landing h1 {
+    font-size: 3.5rem;
+  }
+
+  .agar-landing h2 {
+    font-size: 2.75rem;
+  }
+}
+
+/* Dark mode for landing */
+.dark .agar-landing {
+  --color-agarwood: #F5F1EB;
+  --color-gold: #D4B878;
+  --color-beige: #2A1F1A;
+  /* dark-brown stays unchanged — used for dark-variant section bgs */
+
+  background: #1A1410;
+  color: #F5F1EB;
+}
+
+/* Dark-variant sections (e.g. footer) restore the original dark palette */
+.dark .agar-landing .agar-dark-section {
+  --color-agarwood: #3B2C26;
+  --color-beige: #F5F1EB;
+}
+
+/* Dark mode glass */
+.dark .agar-landing .glass {
+  background: rgba(26, 20, 16, 0.8);
+  border-color: rgba(198, 166, 100, 0.15);
+}
+
+/* Dark mode card hover */
+.dark .agar-landing .card-hover:hover {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode text gradient */
+.dark .agar-landing .text-gradient {
+  background: linear-gradient(135deg, #F5F1EB 0%, #D4B878 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Dark mode wood texture */
+.dark .agar-landing .wood-texture {
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(198, 166, 100, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(198, 166, 100, 0.08) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(245, 241, 235, 0.03) 0%, transparent 25%, rgba(245, 241, 235, 0.03) 50%, transparent 75%);
+}
+
+/* Dark mode scrollbar */
+.dark .agar-landing ::-webkit-scrollbar-track {
+  background: #1A1410;
+}
+
+.dark .agar-landing ::-webkit-scrollbar-thumb {
+  background: #D4B878;
+}
+
+/* Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .agar-landing *,
+  .agar-landing *::before,
+  .agar-landing *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* GPU hints for scroll-linked elements */
+.agar-landing [style*="transform"] {
+  will-change: transform;
+}
+
+.agar-landing .parallax-layer {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}

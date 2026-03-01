@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,10 +11,12 @@ import {
   AlertCircle,
   Loader2,
   ExternalLink,
+  Crown,
 } from "lucide-react";
 import { SuggestionChip } from "./suggestion-chip";
 import { AIInputBar, type FileUploadState } from "./ai-input-bar";
 import { AiAvatar } from "./ai-avatar";
+import { UpgradeModal } from "@/components/overlays/upgrade-modal";
 
 type ChipSet = { text: string; query: string }[];
 
@@ -333,6 +335,16 @@ function ExpandedDropZone({
   );
 }
 
+// ─── FAB Upgrade Bubble messages ─────────────────────────────
+const UPGRADE_MESSAGES = [
+  "Unlock unlimited AI scans",
+  "Get 150 AI tokens/month",
+  "50% off Pro — limited time",
+  "Unlimited journal entries",
+];
+
+const DISMISS_KEY = "agar_upgrade_dismissed";
+
 // ─── Main Panel ─────────────────────────────────────────────
 export function AssistantPanel() {
   const pathname = usePathname();
@@ -341,6 +353,53 @@ export function AssistantPanel() {
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileState, setFileState] = useState<FileUploadState | null>(null);
+
+  // Pro upgrade nudge state
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [bubbleDismissed, setBubbleDismissed] = useState(true);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [bubbleVisible, setBubbleVisible] = useState(false);
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  // Fetch plan on mount
+  useEffect(() => {
+    fetch("/api/org/current")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.subscriptionPlan) {
+          setSubscriptionPlan(d.subscriptionPlan);
+          const wasDismissed = sessionStorage.getItem(DISMISS_KEY) === "1";
+          setBubbleDismissed(wasDismissed);
+          setBannerDismissed(wasDismissed);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const isFreePlan = subscriptionPlan === "FREE";
+
+  // FAB bubble: delayed entrance + message rotation
+  useEffect(() => {
+    if (!isFreePlan || bubbleDismissed || !isMinimized) return;
+    const showTimer = setTimeout(() => setBubbleVisible(true), 3000);
+    return () => clearTimeout(showTimer);
+  }, [isFreePlan, bubbleDismissed, isMinimized]);
+
+  useEffect(() => {
+    if (!bubbleVisible) return;
+    const interval = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % UPGRADE_MESSAGES.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [bubbleVisible]);
+
+  function dismissUpgradeNudge() {
+    sessionStorage.setItem(DISMISS_KEY, "1");
+    setBubbleDismissed(true);
+    setBubbleVisible(false);
+    setBannerDismissed(true);
+  }
 
   async function handleQuery(query: string) {
     setThinking(true);
@@ -423,21 +482,55 @@ export function AssistantPanel() {
     }
   }
 
-  // ─── Minimized: floating action button ─────────────────────
+  // ─── Minimized: floating action button + upgrade bubble ────
   if (isMinimized) {
     return (
-      <button
-        onClick={() => setIsMinimized(false)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--glass-dark)] shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/30"
-        aria-label="Open AI Assistant"
-      >
-        <AiAvatar size="sm" showRing showGlow />
-      </button>
+      <>
+        {/* FAB Upgrade Bubble */}
+        {isFreePlan && bubbleVisible && !bubbleDismissed && (
+          <div
+            className="fixed bottom-8 right-[5.5rem] z-50 flex max-w-[180px] items-start gap-2 rounded-xl bg-[var(--glass-dark)] px-3 py-2.5 shadow-lg ring-1 ring-white/10 backdrop-blur-xl animate-in fade-in slide-in-from-right-2 duration-500"
+          >
+            <div className="min-w-0 flex-1">
+              <p
+                key={msgIndex}
+                className="text-[11px] leading-snug text-white/70 animate-in fade-in duration-300"
+              >
+                {UPGRADE_MESSAGES[msgIndex]}
+              </p>
+              <button
+                onClick={(e) => { e.stopPropagation(); setUpgradeOpen(true); }}
+                className="mt-1 text-[10px] font-semibold text-accent-yellow hover:text-accent-yellow/80 transition-colors"
+              >
+                Upgrade →
+              </button>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); dismissUpgradeNudge(); }}
+              className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-white/30 hover:text-white/60 transition-colors"
+              aria-label="Dismiss"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={() => setIsMinimized(false)}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--glass-dark)] shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/30"
+          aria-label="Open AI Assistant"
+        >
+          <AiAvatar size="sm" showRing showGlow />
+        </button>
+
+        <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason="general" />
+      </>
     );
   }
 
   // ─── Open: floating panel (not full-screen) ─────────────────
   return (
+  <>
     <div className="fixed bottom-6 right-6 z-50 flex h-[520px] max-h-[85vh] w-[400px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--glass-dark)] shadow-2xl backdrop-blur-xl">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
@@ -470,6 +563,33 @@ export function AssistantPanel() {
           </button>
         </div>
       </div>
+
+      {/* Pro upsell banner */}
+      {isFreePlan && !bannerDismissed && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-accent-yellow/15 bg-accent-yellow/5 px-4 py-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Crown className="h-3 w-3 shrink-0 text-accent-yellow" />
+            <span className="truncate text-[11px] text-white/70">
+              <b className="text-white/90">Pro:</b> 150 AI tokens/month + unlimited scans
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setUpgradeOpen(true)}
+              className="text-[10px] font-semibold text-accent-yellow hover:text-accent-yellow/80 transition-colors whitespace-nowrap"
+            >
+              Upgrade
+            </button>
+            <button
+              onClick={() => { dismissUpgradeNudge(); }}
+              className="flex h-4 w-4 items-center justify-center rounded text-white/30 hover:text-white/60 transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content (scrollable) */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
@@ -551,5 +671,8 @@ export function AssistantPanel() {
         <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
       </div>
     </div>
+
+    <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason="general" />
+  </>
   );
 }

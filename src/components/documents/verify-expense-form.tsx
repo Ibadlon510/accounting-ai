@@ -29,6 +29,8 @@ function emptyLine(accounts: Account[]): ExpenseLine {
   };
 }
 
+type BankAccount = { id: string; accountName: string; bankName: string; currency: string };
+
 type VerifyExpenseFormProps = {
   form: {
     date: string;
@@ -49,6 +51,9 @@ type VerifyExpenseFormProps = {
   accounts: Account[];
   suppliers: Supplier[];
   setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>;
+  bankAccounts: BankAccount[];
+  bankAccountId: string;
+  setBankAccountId: (id: string) => void;
   fieldConfidence: (field: string) => number | undefined;
   ex: { gl_prediction?: { code?: string; confidence?: number } } | null;
   saving: boolean;
@@ -63,6 +68,9 @@ export function VerifyExpenseForm({
   accounts,
   suppliers,
   setSuppliers,
+  bankAccounts,
+  bankAccountId,
+  setBankAccountId,
   fieldConfidence,
   ex,
   saving,
@@ -159,6 +167,21 @@ export function VerifyExpenseForm({
             searchPlaceholder="Search currency..."
           />
         </SmartField>
+        <div>
+          <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">
+            Paid From
+          </Label>
+          <SearchableSelect
+            value={bankAccountId}
+            onChange={setBankAccountId}
+            options={bankAccounts.map((ba) => ({
+              value: ba.id,
+              label: `${ba.accountName} (${ba.bankName})`,
+            }))}
+            placeholder="Select bank account"
+            searchPlaceholder="Search bank accounts..."
+          />
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border-subtle overflow-hidden">

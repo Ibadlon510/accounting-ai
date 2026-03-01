@@ -15,8 +15,8 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-// Subscription plan for token economy (MVP)
-export const SUBSCRIPTION_PLANS = ["FREELANCER", "BUSINESS", "ENTERPRISE", "ARCHIVE"] as const;
+// Subscription plan for billing (Free + Pro + Archive)
+export const SUBSCRIPTION_PLANS = ["FREE", "PRO", "ARCHIVE"] as const;
 export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 
 // ─── Organizations ───────────────────────────────────────────
@@ -30,8 +30,17 @@ export const organizations = pgTable("organizations", {
   phone: varchar("phone", { length: 30 }),
   email: varchar("email", { length: 255 }),
   logoUrl: text("logo_url"),
-  subscriptionPlan: varchar("subscription_plan", { length: 20 }).notNull().default("FREELANCER"),
-  tokenBalance: integer("token_balance").notNull().default(50),
+  subscriptionPlan: varchar("subscription_plan", { length: 20 }).notNull().default("FREE"),
+  tokenBalance: integer("token_balance").notNull().default(0),
+  freeAiDocsUsed: integer("free_ai_docs_used").notNull().default(0),
+  freeAiStatementsUsed: integer("free_ai_statements_used").notNull().default(0),
+  maxUsers: integer("max_users").notNull().default(1),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+  stripePriceId: varchar("stripe_price_id", { length: 255 }),
+  subscriptionStatus: varchar("subscription_status", { length: 20 }).notNull().default("active"),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  extraSeats: integer("extra_seats").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -686,6 +695,111 @@ export const documentTransactionLines = pgTable("document_transaction_lines", {
   lineOrder: integer("line_order").notNull().default(0),
 });
 
+// ─── Expenses (standalone direct payments) ──────────────────
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  expenseNumber: varchar("expense_number", { length: 30 }).notNull(),
+  date: date("date").notNull(),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  supplierName: varchar("supplier_name", { length: 255 }),
+  bankAccountId: uuid("bank_account_id")
+    .notNull()
+    .references(() => bankAccounts.id),
+  description: text("description"),
+  subtotal: numeric("subtotal", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 18, scale: 2 }).notNull().default("0"),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  reference: varchar("reference", { length: 100 }),
+  journalEntryId: uuid("journal_entry_id"),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const expenseLines = pgTable("expense_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  expenseId: uuid("expense_id")
+    .notNull()
+    .references(() => expenses.id, { onDelete: "cascade" }),
+  description: text("description").notNull().default(""),
+  glAccountId: uuid("gl_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
+  unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  lineOrder: integer("line_order").notNull().default(0),
+});
+
+// ─── Credit Notes (Sales & Purchase) ────────────────────────
+export const creditNotes = pgTable("credit_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  creditNoteNumber: varchar("credit_note_number", { length: 30 }).notNull(),
+  creditNoteType: varchar("credit_note_type", { length: 10 }).notNull(), // sales, purchase
+  date: date("date").notNull(),
+  customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+  billId: uuid("bill_id").references(() => bills.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  subtotal: numeric("subtotal", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 18, scale: 2 }).notNull().default("0"),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  status: varchar("status", { length: 15 }).notNull().default("draft"), // draft, confirmed, applied
+  journalEntryId: uuid("journal_entry_id"),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const creditNoteLines = pgTable("credit_note_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creditNoteId: uuid("credit_note_id")
+    .notNull()
+    .references(() => creditNotes.id, { onDelete: "cascade" }),
+  description: text("description").notNull().default(""),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
+  unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  lineOrder: integer("line_order").notNull().default(0),
+});
+
+// ─── Team Invites ──────────────────────────────────────────
+export const teamInvites = pgTable("team_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull().default("accountant"),
+  invitedBy: uuid("invited_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Smart Learning: merchant → GL preference per org
 export const merchantMaps = pgTable(
   "merchant_maps",
@@ -703,3 +817,23 @@ export const merchantMaps = pgTable(
   },
   (t) => [uniqueIndex("merchant_maps_org_merchant_idx").on(t.organizationId, t.merchantName)]
 );
+
+// ─── Notifications ─────────────────────────────────────────
+export const NOTIFICATION_CATEGORIES = ["billing", "team", "documents", "reports", "promo"] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // null = org-wide
+  category: varchar("category", { length: 20 }).notNull(), // billing, team, documents, reports, promo
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  icon: varchar("icon", { length: 30 }), // lucide icon name
+  actionUrl: varchar("action_url", { length: 512 }), // deep link
+  actionLabel: varchar("action_label", { length: 50 }), // CTA text
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

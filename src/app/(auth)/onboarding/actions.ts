@@ -8,7 +8,7 @@ import { CURRENT_ORG_COOKIE, COOKIE_MAX_AGE } from "@/lib/org/constants";
 import { eq } from "drizzle-orm";
 import { seedChartOfAccounts } from "@/lib/db/seed-chart-of-accounts";
 
-export type OnboardingResult = { ok: true; redirect?: string } | { ok: false; error: string };
+export type OnboardingResult = { ok: true; orgId: string } | { ok: false; error: string };
 
 export async function createOrganizationAndLaunch(formData: {
   companyName: string;
@@ -46,8 +46,8 @@ export async function createOrganizationAndLaunch(formData: {
         currency: currency || "AED",
         fiscalYearStart: fiscalYearStart || 1,
         taxRegistrationNumber: trn?.trim() || null,
-        subscriptionPlan: "FREELANCER",
-        tokenBalance: 50,
+        subscriptionPlan: "FREE",
+        tokenBalance: 0,
       })
       .returning({ id: organizations.id });
     if (!org?.id) {
@@ -67,7 +67,7 @@ export async function createOrganizationAndLaunch(formData: {
     // Set current org cookie
     const cookieStore = await cookies();
     cookieStore.set(CURRENT_ORG_COOKIE, org.id, {
-      httpOnly: true,
+      httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
@@ -95,7 +95,7 @@ export async function createOrganizationAndLaunch(formData: {
       sendVerificationEmail({ to: existingUser.email, verifyUrl, name: existingUser.name }).catch(() => {});
     }
 
-    return { ok: true, redirect: "/dashboard" };
+    return { ok: true, orgId: org.id };
   } catch (e: unknown) {
     const err = e as Record<string, unknown>;
     console.error("Onboarding error:", {

@@ -1,8 +1,126 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { invoices } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  invoices,
+  invoiceLines,
+  customers,
+  chartOfAccounts,
+  journalEntries,
+  journalLines,
+} from "@/lib/db/schema";
+import { eq, and, count } from "drizzle-orm";
+import { resolveOrCreatePeriod } from "@/lib/banking/period";
+
+async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
+  const [inv] = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      customerId: invoices.customerId,
+      issueDate: invoices.issueDate,
+      subtotal: invoices.subtotal,
+      taxAmount: invoices.taxAmount,
+      total: invoices.total,
+      currency: invoices.currency,
+      journalEntryId: invoices.journalEntryId,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.organizationId, orgId)))
+    .limit(1);
+
+  if (!inv || inv.journalEntryId) return; // already has JE
+
+  const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, inv.customerId)).limit(1);
+  const customerName = cust?.name ?? "Customer";
+
+  const total = parseFloat(inv.total ?? "0");
+  const subtotal = parseFloat(inv.subtotal ?? "0");
+  const taxAmount = parseFloat(inv.taxAmount ?? "0");
+  if (total <= 0) return;
+
+  const periodId = await resolveOrCreatePeriod(orgId, inv.issueDate);
+  if (!periodId) return;
+
+  const [arAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
+  const [salesAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "4000"))).limit(1);
+  const [vatAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
+
+  if (!arAccount || !salesAccount) return;
+
+  const ym = inv.issueDate.slice(0, 7).replace("-", "");
+  const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
+  const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
+  const entryNumber = `JE-${ym}-${seq}`;
+
+  const [je] = await db
+    .insert(journalEntries)
+    .values({
+      organizationId: orgId,
+      periodId,
+      entryNumber,
+      entryDate: inv.issueDate,
+      description: `Sales Invoice ${inv.invoiceNumber} — ${customerName}`,
+      reference: inv.id,
+      sourceType: "invoice",
+      sourceId: inv.id,
+      status: "posted",
+      currency: inv.currency ?? "AED",
+      totalDebit: String(total),
+      totalCredit: String(total),
+      postedAt: new Date(),
+    })
+    .returning({ id: journalEntries.id });
+
+  if (!je) return;
+
+  const jl: (typeof journalLines.$inferInsert)[] = [];
+  const cur = inv.currency ?? "AED";
+
+  jl.push({
+    journalEntryId: je.id,
+    organizationId: orgId,
+    accountId: arAccount.id,
+    description: `AR — ${customerName}`,
+    debit: String(total),
+    credit: "0",
+    currency: cur,
+    baseCurrencyDebit: String(total),
+    baseCurrencyCredit: "0",
+    lineOrder: 1,
+  });
+  jl.push({
+    journalEntryId: je.id,
+    organizationId: orgId,
+    accountId: salesAccount.id,
+    description: `Revenue — ${customerName}`,
+    debit: "0",
+    credit: String(subtotal),
+    currency: cur,
+    baseCurrencyDebit: "0",
+    baseCurrencyCredit: String(subtotal),
+    lineOrder: 2,
+  });
+  if (taxAmount > 0 && vatAccount) {
+    jl.push({
+      journalEntryId: je.id,
+      organizationId: orgId,
+      accountId: vatAccount.id,
+      description: `VAT output — ${customerName}`,
+      debit: "0",
+      credit: String(taxAmount),
+      currency: cur,
+      baseCurrencyDebit: "0",
+      baseCurrencyCredit: String(taxAmount),
+      taxCode: "VAT5",
+      taxAmount: String(taxAmount),
+      lineOrder: 3,
+    });
+  }
+
+  if (jl.length > 0) await db.insert(journalLines).values(jl);
+  await db.update(invoices).set({ journalEntryId: je.id }).where(eq(invoices.id, inv.id));
+}
 
 export async function PATCH(
   request: Request,
@@ -33,7 +151,7 @@ export async function PATCH(
 
   try {
     const [existing] = await db
-      .select({ id: invoices.id, status: invoices.status })
+      .select({ id: invoices.id, status: invoices.status, journalEntryId: invoices.journalEntryId })
       .from(invoices)
       .where(and(eq(invoices.id, id), eq(invoices.organizationId, orgId)))
       .limit(1);
@@ -51,6 +169,11 @@ export async function PATCH(
         invoiceNumber: invoices.invoiceNumber,
         status: invoices.status,
       });
+
+    // Create JE when invoice moves from draft to sent/confirmed (and no JE yet)
+    if (status === "sent" && existing.status === "draft" && !existing.journalEntryId) {
+      await createInvoiceJournalEntry(orgId, id);
+    }
 
     return NextResponse.json({ invoice: updated });
   } catch (e: unknown) {

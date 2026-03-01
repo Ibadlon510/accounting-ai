@@ -144,6 +144,7 @@ export default function DocumentVerifyPage() {
     supplierId: "",
     lines: [],
   });
+  const [expenseBankAccountId, setExpenseBankAccountId] = useState("");
 
   const emptyLine = (): InvoiceLine => ({
     id: `new-${Date.now()}-${Math.random()}`,
@@ -290,6 +291,7 @@ export default function DocumentVerifyPage() {
         setSuppliers(suppList);
         setBankAccounts(bankList);
         if (bankList.length > 0) setBankAccountId((prev) => prev || bankList[0].id);
+        if (bankList.length > 0) setExpenseBankAccountId((prev) => prev || bankList[0].id);
 
         type InvItem = { id: string; customerId: string; invoiceNumber: string; total: number; amountDue: number; status?: string };
         type BillItem = { id: string; supplierId: string; billNumber: string; total: number; amountDue: number };
@@ -421,6 +423,7 @@ export default function DocumentVerifyPage() {
           currency: expenseForm.currency,
           merchantName,
           supplierId: expenseForm.supplierId || undefined,
+          bankAccountId: expenseBankAccountId || undefined,
           lines: expenseForm.lines.map((l) => ({
             description: l.description,
             quantity: l.quantity,
@@ -890,6 +893,9 @@ export default function DocumentVerifyPage() {
                           accounts={accounts}
                           suppliers={suppliers}
                           setSuppliers={setSuppliers}
+                          bankAccounts={bankAccounts}
+                          bankAccountId={expenseBankAccountId}
+                          setBankAccountId={setExpenseBankAccountId}
                           fieldConfidence={fieldConfidence}
                           ex={ex}
                           saving={saving}

@@ -2,12 +2,13 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { FileText, Users, CreditCard, ScrollText } from "lucide-react";
+import { FileText, Users, CreditCard, ScrollText, RotateCcw } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { DashboardPill } from "@/components/dashboard/dashboard-pill";
 
 const navItems = [
   { href: "/sales/invoices", label: "Invoices", icon: FileText },
+  { href: "/sales/credit-notes", label: "Credit Notes", icon: RotateCcw },
   { href: "/sales/customers", label: "Customers", icon: Users },
   { href: "/sales/payments", label: "Payments Received", icon: CreditCard },
   { href: "/sales/statements", label: "Statements", icon: ScrollText },
@@ -16,6 +17,7 @@ const navItems = [
 const titleByPath: Record<string, string> = {
   "/sales": "Sales",
   "/sales/invoices": "Invoices",
+  "/sales/credit-notes": "Credit Notes",
   "/sales/customers": "Customers",
   "/sales/payments": "Payments Received",
   "/sales/statements": "Statements",

@@ -74,7 +74,7 @@ function VerifyEmailContent() {
 
     setTimeout(() => {
       setCelebrationDone(true);
-      router.push("/onboarding");
+      router.push("/workspaces");
       router.refresh();
     }, 3500);
   }, [router]);
@@ -152,7 +152,7 @@ function VerifyEmailContent() {
             </div>
           ) : (
             <Button
-              onClick={() => { router.push("/onboarding"); router.refresh(); }}
+              onClick={() => { router.push("/workspaces"); router.refresh(); }}
               className="h-11 w-full rounded-xl bg-text-primary text-[14px] font-semibold text-white hover:bg-text-primary/90"
             >
               Continue to Setup

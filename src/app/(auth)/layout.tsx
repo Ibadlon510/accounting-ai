@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Sparkles, Receipt, BarChart3, Zap, ShieldCheck, Globe, Lock } from "lucide-react";
 
 const features = [
@@ -49,7 +50,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* Left Panel — Brand Showcase (hidden on mobile) */}
       <div className="bg-canvas-gradient relative hidden w-[520px] shrink-0 flex-col items-center justify-between px-12 py-10 lg:flex">
         {/* Logo */}
-        <div className="flex w-full items-center gap-2">
+        <Link href="/" className="flex w-full items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-orange-500">
             <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-white" stroke="currentColor" strokeWidth={2.5}>
               <path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -61,7 +62,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <span className="text-[15px] font-bold text-text-primary">Agar</span>
             <span className="text-[11px] font-medium text-text-secondary">Smart Accounting</span>
           </div>
-        </div>
+        </Link>
 
         {/* Center — AI Character + Feature Carousel */}
         <div className="flex flex-col items-center gap-8">

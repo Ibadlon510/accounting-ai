@@ -12,13 +12,27 @@ export default function GeneralLedgerPage() {
   const [search, setSearch] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [balances, setBalances] = useState<Record<string, number>>({});
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
 
   useEffect(() => {
     fetch("/api/accounting/chart-of-accounts", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { accounts: [] })
       .then((d) => setAccounts(d.accounts ?? []))
       .catch(() => {});
+    fetch("/api/accounting/general-ledger", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { balances: {} })
+      .then((d) => setBalances(d.balances ?? {}))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!selectedAccountId) { setLedgerEntries([]); return; }
+    fetch(`/api/accounting/general-ledger?accountId=${selectedAccountId}`, { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { entries: [] })
+      .then((d) => setLedgerEntries(d.entries ?? []))
+      .catch(() => setLedgerEntries([]));
+  }, [selectedAccountId]);
 
   const filteredAccounts = accounts.filter(
     (a) =>
@@ -29,9 +43,6 @@ export default function GeneralLedgerPage() {
   const selectedAccount = selectedAccountId
     ? accounts.find((a) => a.id === selectedAccountId)
     : null;
-
-  // No real ledger entries yet - will show empty state
-  const ledgerEntries: LedgerEntry[] = [];
 
   return (
     <>
@@ -52,7 +63,7 @@ export default function GeneralLedgerPage() {
             </div>
             <div className="max-h-[600px] overflow-y-auto">
               {filteredAccounts.map((account) => {
-                const balance = 0;
+                const balance = balances[account.id] ?? 0;
 
                 return (
                   <button

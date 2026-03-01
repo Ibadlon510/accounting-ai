@@ -15,7 +15,7 @@ import {
 import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
 import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
 import { formatNumber } from "@/lib/accounting/engine";
-import { FileText, Calendar, Building2, DollarSign, Receipt, CreditCard } from "lucide-react";
+import { FileText, Calendar, Building2, DollarSign, Receipt, CreditCard, Send } from "lucide-react";
 type BillLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: BillLine[] };
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,11 @@ interface ViewBillPanelProps {
   bill: Bill | undefined | null;
   onRecordPayment?: () => void;
   onViewPaymentReceipt?: (paymentId: string) => void;
+  onConfirm?: () => void;
+  confirming?: boolean;
 }
 
-export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onViewPaymentReceipt }: ViewBillPanelProps) {
+export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onViewPaymentReceipt, onConfirm, confirming }: ViewBillPanelProps) {
   if (!bill) return null;
 
   return (
@@ -152,7 +154,17 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
         </EntityPanelBody>
 
         <EntityPanelFooter onCancel={() => onOpenChange(false)} cancelLabel="Close">
-          {onRecordPayment && bill.amountDue > 0 && (
+          {bill.status === "draft" && onConfirm && (
+            <Button
+              size="sm"
+              onClick={onConfirm}
+              disabled={confirming}
+              className="mr-auto gap-1.5 rounded-xl bg-text-primary px-5 text-white hover:bg-text-primary/90"
+            >
+              <Send className="h-3.5 w-3.5" /> {confirming ? "Confirming…" : "Confirm Bill"}
+            </Button>
+          )}
+          {onRecordPayment && bill.amountDue > 0 && bill.status !== "draft" && (
             <Button
               size="sm"
               onClick={onRecordPayment}

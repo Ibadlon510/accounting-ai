@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Download, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { comingSoon } from "@/lib/utils/toast-helpers";
 
 type ReportRow = { label: string; amount: number; isHeader?: boolean; isTotal?: boolean; indent?: number };
@@ -33,52 +34,68 @@ function ReportSection({ title, rows }: { title: string; rows: ReportRow[] }) {
   );
 }
 
-export default function BalanceSheetPage() {
-  const [stats, setStats] = useState({ bankBalance: 0, receivables: 0, payables: 0 });
+type AccountLine = { code: string; name: string; amount: number };
+type BsData = {
+  asset: AccountLine[]; liability: AccountLine[]; equity: AccountLine[];
+  totalAssets: number; totalLiabilities: number; totalEquity: number; retainedEarnings: number;
+};
 
-  useEffect(() => {
-    fetch("/api/dashboard/stats", { cache: "no-store" })
+export default function BalanceSheetPage() {
+  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10));
+  const [bs, setBs] = useState<BsData>({ asset: [], liability: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0, retainedEarnings: 0 });
+
+  const loadReport = useCallback(() => {
+    const params = new URLSearchParams();
+    if (asOf) params.set("to", asOf);
+    fetch(`/api/accounting/report-data?${params.toString()}`, { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (data) setStats({
-          bankBalance: data.banking?.totalBalance ?? 0,
-          receivables: data.sales?.totalOutstanding ?? 0,
-          payables: data.purchases?.totalOutstanding ?? 0,
-        });
+        if (data?.bs) setBs(data.bs);
       })
       .catch(() => {});
-  }, []);
+  }, [asOf]);
 
-  const totalAssets = stats.bankBalance + stats.receivables;
-  const totalLiabilitiesEquity = stats.payables + (totalAssets - stats.payables);
+  useEffect(() => { loadReport(); }, [loadReport]);
+
+  const totalAssets = bs.totalAssets;
+  const totalLiabilitiesEquity = bs.totalLiabilities + bs.totalEquity + bs.retainedEarnings;
   const isBalanced = Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01;
 
+  const formatDisplayDate = (d: string) => {
+    if (!d) return "";
+    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  };
+
   const assets: ReportRow[] = [
-    { label: "Current Assets", amount: 0, isHeader: true },
-    { label: "Cash & Bank", amount: stats.bankBalance, indent: 1 },
-    { label: "Accounts Receivable", amount: stats.receivables, indent: 1 },
+    { label: "Assets", amount: 0, isHeader: true },
+    ...bs.asset.map((a) => ({ label: `${a.code} — ${a.name}`, amount: a.amount, indent: 1 })),
     { label: "Total Assets", amount: totalAssets, isTotal: true },
   ];
   const liabilities: ReportRow[] = [
-    { label: "Current Liabilities", amount: 0, isHeader: true },
-    { label: "Accounts Payable", amount: stats.payables, indent: 1 },
-    { label: "Total Liabilities", amount: stats.payables, isTotal: true },
+    { label: "Liabilities", amount: 0, isHeader: true },
+    ...bs.liability.map((l) => ({ label: `${l.code} — ${l.name}`, amount: l.amount, indent: 1 })),
+    { label: "Total Liabilities", amount: bs.totalLiabilities, isTotal: true },
   ];
   const equity: ReportRow[] = [
-    { label: "Owner's Equity", amount: 0, isHeader: true },
-    { label: "Retained Earnings", amount: totalAssets - stats.payables, indent: 1 },
-    { label: "Total Equity", amount: totalAssets - stats.payables, isTotal: true },
+    { label: "Equity", amount: 0, isHeader: true },
+    ...bs.equity.map((e) => ({ label: `${e.code} — ${e.name}`, amount: e.amount, indent: 1 })),
+    { label: "Retained Earnings", amount: bs.retainedEarnings, indent: 1 },
+    { label: "Total Equity", amount: bs.totalEquity + bs.retainedEarnings, isTotal: true },
   ];
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-end">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <label className="text-[12px] font-medium text-text-meta">As of</label>
+          <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="h-9 w-40 rounded-xl border-border-subtle text-[13px]" />
+        </div>
         <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
           <Download className="h-3.5 w-3.5" /> Export PDF
         </Button>
       </div>
 
-      <p className="mb-4 text-[13px] text-text-secondary">As of February 28, 2026</p>
+      <p className="mb-4 text-[13px] text-text-secondary">As of {formatDisplayDate(asOf)}</p>
 
       <div className={`mb-6 flex items-center gap-3 rounded-2xl px-5 py-3 ${isBalanced ? "bg-success-light text-success" : "bg-error-light text-error"}`}>
         {isBalanced ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}

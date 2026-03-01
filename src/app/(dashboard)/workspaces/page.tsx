@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
@@ -39,13 +40,43 @@ const fiscalMonthNames: Record<number, string> = {
 };
 
 export default function WorkspacesPage() {
+  const router = useRouter();
   const currentOrgId = useCurrentOrgId();
   const setCurrentOrg = useSetCurrentOrg();
   const [organizations, setOrganizations] = useState<OrgItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [checkingRestore, setCheckingRestore] = useState(true);
   const [stats, setStats] = useState({ totalRevenue: 0, totalExpenses: 0, totalBalance: 0 });
 
+  // Auto-restore: 0 orgs → onboarding, 1 org without cookie → auto-switch, else show list
   useEffect(() => {
+    fetch("/api/org/auto-restore", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: { singleOrgId?: string | null; orgCount?: number }) => {
+        const orgCount = data.orgCount ?? 0;
+        if (orgCount === 0) {
+          router.replace("/onboarding");
+          return;
+        }
+        if (data.singleOrgId && !currentOrgId) {
+          // Single org and no cookie set — auto-switch
+          return fetch("/api/org/switch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId: data.singleOrgId }),
+          }).then(() => {
+            router.replace("/dashboard");
+          });
+        }
+        // Multiple orgs or already has cookie — show the list
+        setCheckingRestore(false);
+      })
+      .catch(() => setCheckingRestore(false));
+  }, [router, currentOrgId]);
+
+  useEffect(() => {
+    if (checkingRestore) return;
+
     fetch("/api/org/list", { cache: "no-store" })
       .then((res) => res.ok ? res.json() : { organizations: [] })
       .then((data: { organizations: OrgItem[] }) => {
@@ -66,7 +97,7 @@ export default function WorkspacesPage() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [checkingRestore]);
 
   const handleOrgClick = async (org: OrgItem) => {
     if (org.id === currentOrgId) {
@@ -79,6 +110,14 @@ export default function WorkspacesPage() {
       comingSoon("Switch Organization");
     }
   };
+
+  if (checkingRestore) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <p className="text-[14px] text-text-secondary">Loading workspaces...</p>
+      </div>
+    );
+  }
 
   return (
     <>

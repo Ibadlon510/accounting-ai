@@ -2,18 +2,22 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { FileText, Users } from "lucide-react";
+import { FileText, Users, Receipt, RotateCcw } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { DashboardPill } from "@/components/dashboard/dashboard-pill";
 
 const navItems = [
   { href: "/purchases/bills", label: "Bills", icon: FileText },
+  { href: "/purchases/expenses", label: "Expenses", icon: Receipt },
+  { href: "/purchases/credit-notes", label: "Credit Notes", icon: RotateCcw },
   { href: "/purchases/suppliers", label: "Suppliers", icon: Users },
 ];
 
 const titleByPath: Record<string, string> = {
   "/purchases": "Purchases",
   "/purchases/bills": "Bills",
+  "/purchases/expenses": "Expenses",
+  "/purchases/credit-notes": "Credit Notes",
   "/purchases/suppliers": "Suppliers",
 };
 

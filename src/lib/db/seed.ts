@@ -35,6 +35,10 @@ import {
   vatReturns,
   inventoryMovements,
   documents,
+  expenses,
+  expenseLines,
+  creditNotes,
+  creditNoteLines,
 } from "./schema";
 import { seedChartOfAccounts } from "./seed-chart-of-accounts";
 import { ACCOUNT_TYPES } from "../accounting/uae-chart-of-accounts";
@@ -833,82 +837,237 @@ async function seedInventory(ctx: SeedContext): Promise<void> {
 async function seedAccounting(ctx: SeedContext): Promise<void> {
   const { organizationId, periodIdsByMonth, acc } = ctx;
   const existingJE = await db.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.organizationId, organizationId)).limit(1);
-  if (existingJE.length === 0) {
-    let jeSeq = 1;
-    const periodJan = periodIdsByMonth.get(1)!;
-    const [je1] = await db
+  if (existingJE.length > 0) return;
+
+  let jeSeq = 1;
+  const cur = "AED";
+  function entryNum(month: number): string {
+    return `JE-${YEAR}${String(month).padStart(2, "0")}-${String(jeSeq++).padStart(4, "0")}`;
+  }
+
+  // ── 1. Capital investment ────────────────────────────────────
+  const periodJan = periodIdsByMonth.get(1)!;
+  const [je1] = await db
+    .insert(journalEntries)
+    .values({
+      organizationId, periodId: periodJan, entryNumber: entryNum(1),
+      entryDate: date(YEAR, 1, 5), description: "Initial capital investment",
+      sourceType: "manual", status: "posted", currency: cur,
+      totalDebit: "500000", totalCredit: "500000", isDemo: true,
+    })
+    .returning({ id: journalEntries.id });
+  if (je1) {
+    await db.insert(journalLines).values([
+      { journalEntryId: je1.id, organizationId, accountId: acc("1110"), debit: "500000", credit: "0", baseCurrencyDebit: "500000", baseCurrencyCredit: "0", lineOrder: 1 },
+      { journalEntryId: je1.id, organizationId, accountId: acc("3010"), debit: "0", credit: "500000", baseCurrencyDebit: "0", baseCurrencyCredit: "500000", lineOrder: 2 },
+    ]);
+  }
+
+  // ── 2. Monthly recurring: rent + salaries ────────────────────
+  for (let m = 1; m <= 12; m++) {
+    const periodId = periodIdsByMonth.get(m)!;
+    const [jeRent] = await db
       .insert(journalEntries)
       .values({
-        organizationId,
-        periodId: periodJan,
-        entryNumber: `JE-${YEAR}01-${String(jeSeq++).padStart(4, "0")}`,
-        entryDate: date(YEAR, 1, 5),
-        description: "Initial capital investment",
-        sourceType: "manual",
-        status: "posted",
-        currency: "AED",
-        totalDebit: "500000",
-        totalCredit: "500000",
-        isDemo: true,
+        organizationId, periodId, entryNumber: entryNum(m),
+        entryDate: date(YEAR, m, 10), description: `Office rent - ${m}/${YEAR}`,
+        sourceType: "manual", status: "posted", isDemo: true, currency: cur,
+        totalDebit: "15000", totalCredit: "15000",
       })
       .returning({ id: journalEntries.id });
-    if (je1) {
+    if (jeRent) {
       await db.insert(journalLines).values([
-        { journalEntryId: je1.id, organizationId, accountId: acc("1110"), debit: "500000", credit: "0", baseCurrencyDebit: "500000", baseCurrencyCredit: "0", lineOrder: 1 },
-        { journalEntryId: je1.id, organizationId, accountId: acc("3010"), debit: "0", credit: "500000", baseCurrencyDebit: "0", baseCurrencyCredit: "500000", lineOrder: 2 },
+        { journalEntryId: jeRent.id, organizationId, accountId: acc("6110"), debit: "15000", credit: "0", baseCurrencyDebit: "15000", baseCurrencyCredit: "0", lineOrder: 1 },
+        { journalEntryId: jeRent.id, organizationId, accountId: acc("1110"), debit: "0", credit: "15000", baseCurrencyDebit: "0", baseCurrencyCredit: "15000", lineOrder: 2 },
       ]);
     }
-    for (let m = 1; m <= 12; m++) {
-      const periodId = periodIdsByMonth.get(m)!;
-      const [jeRent] = await db
-        .insert(journalEntries)
-        .values({
-          organizationId,
-          periodId,
-          entryNumber: `JE-${YEAR}${String(m).padStart(2, "0")}-${String(jeSeq++).padStart(4, "0")}`,
-          entryDate: date(YEAR, m, 10),
-          description: `Office rent - ${m}/${YEAR}`,
-          sourceType: "manual",
-          status: "posted",
-          isDemo: true,
-          currency: "AED",
-          totalDebit: "15000",
-          totalCredit: "15000",
-        })
-        .returning({ id: journalEntries.id });
-      if (jeRent) {
-        await db.insert(journalLines).values([
-          { journalEntryId: jeRent.id, organizationId, accountId: acc("6110"), debit: "15000", credit: "0", baseCurrencyDebit: "15000", baseCurrencyCredit: "0", lineOrder: 1 },
-          { journalEntryId: jeRent.id, organizationId, accountId: acc("1110"), debit: "0", credit: "15000", baseCurrencyDebit: "0", baseCurrencyCredit: "15000", lineOrder: 2 },
-        ]);
+    const [jeSal] = await db
+      .insert(journalEntries)
+      .values({
+        organizationId, periodId, entryNumber: entryNum(m),
+        entryDate: date(YEAR, m, 25), description: `Salary payment - ${m}/${YEAR}`,
+        sourceType: "manual", status: "posted", currency: cur,
+        totalDebit: "45000", totalCredit: "45000", isDemo: true,
+      })
+      .returning({ id: journalEntries.id });
+    if (jeSal) {
+      await db.insert(journalLines).values([
+        { journalEntryId: jeSal.id, organizationId, accountId: acc("6010"), debit: "35000", credit: "0", baseCurrencyDebit: "35000", baseCurrencyCredit: "0", lineOrder: 1 },
+        { journalEntryId: jeSal.id, organizationId, accountId: acc("6020"), debit: "7000", credit: "0", baseCurrencyDebit: "7000", baseCurrencyCredit: "0", lineOrder: 2 },
+        { journalEntryId: jeSal.id, organizationId, accountId: acc("6030"), debit: "3000", credit: "0", baseCurrencyDebit: "3000", baseCurrencyCredit: "0", lineOrder: 3 },
+        { journalEntryId: jeSal.id, organizationId, accountId: acc("1110"), debit: "0", credit: "45000", baseCurrencyDebit: "0", baseCurrencyCredit: "45000", lineOrder: 4 },
+      ]);
+    }
+  }
+
+  // ── 3. Invoice JEs: Dr AR (1210), Cr Revenue (4000), Cr VAT Output (2200) ──
+  const arId = acc("1210");
+  const revenueId = acc("4000");
+  const vatOutputId = acc("2200");
+
+  const allInvoices = await db
+    .select({
+      id: invoices.id, invoiceNumber: invoices.invoiceNumber,
+      issueDate: invoices.issueDate, subtotal: invoices.subtotal,
+      taxAmount: invoices.taxAmount, total: invoices.total, status: invoices.status,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.organizationId, organizationId), eq(invoices.isDemo, true)));
+
+  let invJeCount = 0;
+  for (const inv of allInvoices) {
+    if (inv.status === "draft") continue;
+    const total = parseFloat(inv.total ?? "0");
+    const subtotal = parseFloat(inv.subtotal ?? "0");
+    const taxAmount = parseFloat(inv.taxAmount ?? "0");
+    if (total <= 0) continue;
+
+    const month = parseInt(inv.issueDate.slice(5, 7), 10);
+    const periodId = periodIdsByMonth.get(month)!;
+
+    const [je] = await db
+      .insert(journalEntries)
+      .values({
+        organizationId, periodId, entryNumber: entryNum(month),
+        entryDate: inv.issueDate, description: `Invoice ${inv.invoiceNumber}`,
+        reference: inv.id, sourceType: "invoice", sourceId: inv.id,
+        status: "posted", currency: cur, isDemo: true,
+        totalDebit: String(total), totalCredit: String(total), postedAt: new Date(),
+      })
+      .returning({ id: journalEntries.id });
+
+    if (je) {
+      const jl: (typeof journalLines.$inferInsert)[] = [
+        { journalEntryId: je.id, organizationId, accountId: arId, debit: String(total), credit: "0", currency: cur, baseCurrencyDebit: String(total), baseCurrencyCredit: "0", lineOrder: 1 },
+        { journalEntryId: je.id, organizationId, accountId: revenueId, debit: "0", credit: String(subtotal), currency: cur, baseCurrencyDebit: "0", baseCurrencyCredit: String(subtotal), lineOrder: 2 },
+      ];
+      if (taxAmount > 0) {
+        jl.push({ journalEntryId: je.id, organizationId, accountId: vatOutputId, debit: "0", credit: String(taxAmount), currency: cur, baseCurrencyDebit: "0", baseCurrencyCredit: String(taxAmount), taxCode: "VAT5", taxAmount: String(taxAmount), lineOrder: 3 });
       }
-      const [jeSal] = await db
+      await db.insert(journalLines).values(jl);
+      await db.update(invoices).set({ journalEntryId: je.id }).where(eq(invoices.id, inv.id));
+      invJeCount++;
+    }
+  }
+
+  // ── 4. Bill JEs: Dr Expense (6300), Dr VAT Input (1450), Cr AP (2010) ──
+  const apId = acc("2010");
+  const defaultExpId = acc("6300");
+  const vatInputId = acc("1450");
+
+  const allBills = await db
+    .select({
+      id: bills.id, billNumber: bills.billNumber,
+      issueDate: bills.issueDate, subtotal: bills.subtotal,
+      taxAmount: bills.taxAmount, total: bills.total,
+      status: bills.status, amountPaid: bills.amountPaid,
+    })
+    .from(bills)
+    .where(and(eq(bills.organizationId, organizationId), eq(bills.isDemo, true)));
+
+  let billJeCount = 0;
+  for (const bill of allBills) {
+    if (bill.status === "draft") continue;
+    const total = parseFloat(bill.total ?? "0");
+    const subtotal = parseFloat(bill.subtotal ?? "0");
+    const taxAmount = parseFloat(bill.taxAmount ?? "0");
+    if (total <= 0) continue;
+
+    const month = parseInt(bill.issueDate.slice(5, 7), 10);
+    const periodId = periodIdsByMonth.get(month)!;
+
+    // Bill accrual JE
+    const [je] = await db
+      .insert(journalEntries)
+      .values({
+        organizationId, periodId, entryNumber: entryNum(month),
+        entryDate: bill.issueDate, description: `Bill ${bill.billNumber}`,
+        reference: bill.id, sourceType: "bill", sourceId: bill.id,
+        status: "posted", currency: cur, isDemo: true,
+        totalDebit: String(total), totalCredit: String(total), postedAt: new Date(),
+      })
+      .returning({ id: journalEntries.id });
+
+    if (je) {
+      const jl: (typeof journalLines.$inferInsert)[] = [
+        { journalEntryId: je.id, organizationId, accountId: defaultExpId, debit: String(subtotal), credit: "0", currency: cur, baseCurrencyDebit: String(subtotal), baseCurrencyCredit: "0", lineOrder: 1 },
+      ];
+      if (taxAmount > 0) {
+        jl.push({ journalEntryId: je.id, organizationId, accountId: vatInputId, debit: String(taxAmount), credit: "0", currency: cur, baseCurrencyDebit: String(taxAmount), baseCurrencyCredit: "0", taxCode: "VAT5", taxAmount: String(taxAmount), lineOrder: 2 });
+      }
+      jl.push({ journalEntryId: je.id, organizationId, accountId: apId, debit: "0", credit: String(total), currency: cur, baseCurrencyDebit: "0", baseCurrencyCredit: String(total), lineOrder: jl.length + 1 });
+      await db.insert(journalLines).values(jl);
+      await db.update(bills).set({ journalEntryId: je.id }).where(eq(bills.id, bill.id));
+      billJeCount++;
+    }
+
+    // Bill payment JE (if paid)
+    const amountPaid = parseFloat(bill.amountPaid ?? "0");
+    if (amountPaid > 0) {
+      const payMonth = Math.min(month + 1, 12);
+      const payPeriodId = periodIdsByMonth.get(payMonth)!;
+      const [jePay] = await db
         .insert(journalEntries)
         .values({
-          organizationId,
-          periodId,
-          entryNumber: `JE-${YEAR}${String(m).padStart(2, "0")}-${String(jeSeq++).padStart(4, "0")}`,
-          entryDate: date(YEAR, m, 25),
-          description: `Salary payment - ${m}/${YEAR}`,
-          sourceType: "manual",
-          status: "posted",
-          currency: "AED",
-          totalDebit: "45000",
-          totalCredit: "45000",
-          isDemo: true,
+          organizationId, periodId: payPeriodId, entryNumber: entryNum(payMonth),
+          entryDate: date(YEAR, payMonth, 15),
+          description: `Payment for Bill ${bill.billNumber}`,
+          sourceType: "bill_payment", sourceId: bill.id,
+          status: "posted", currency: cur, isDemo: true,
+          totalDebit: String(amountPaid), totalCredit: String(amountPaid), postedAt: new Date(),
         })
         .returning({ id: journalEntries.id });
-      if (jeSal) {
+
+      if (jePay) {
         await db.insert(journalLines).values([
-          { journalEntryId: jeSal.id, organizationId, accountId: acc("6010"), debit: "35000", credit: "0", baseCurrencyDebit: "35000", baseCurrencyCredit: "0", lineOrder: 1 },
-          { journalEntryId: jeSal.id, organizationId, accountId: acc("6020"), debit: "7000", credit: "0", baseCurrencyDebit: "7000", baseCurrencyCredit: "0", lineOrder: 2 },
-          { journalEntryId: jeSal.id, organizationId, accountId: acc("6030"), debit: "3000", credit: "0", baseCurrencyDebit: "3000", baseCurrencyCredit: "0", lineOrder: 3 },
-          { journalEntryId: jeSal.id, organizationId, accountId: acc("1110"), debit: "0", credit: "45000", baseCurrencyDebit: "0", baseCurrencyCredit: "45000", lineOrder: 4 },
+          { journalEntryId: jePay.id, organizationId, accountId: apId, debit: String(amountPaid), credit: "0", currency: cur, baseCurrencyDebit: String(amountPaid), baseCurrencyCredit: "0", lineOrder: 1 },
+          { journalEntryId: jePay.id, organizationId, accountId: acc("1110"), debit: "0", credit: String(amountPaid), currency: cur, baseCurrencyDebit: "0", baseCurrencyCredit: String(amountPaid), lineOrder: 2 },
         ]);
       }
     }
-    console.log("Journal entries: created for 2025");
   }
+
+  // ── 5. Payment received JEs: Dr Cash (1110), Cr AR (1210) ──
+  const allPayments = await db
+    .select({
+      id: payments.id, paymentNumber: payments.paymentNumber,
+      paymentDate: payments.paymentDate, paymentType: payments.paymentType,
+      amount: payments.amount, journalEntryId: payments.journalEntryId,
+    })
+    .from(payments)
+    .where(and(eq(payments.organizationId, organizationId), eq(payments.isDemo, true)));
+
+  let payJeCount = 0;
+  for (const pay of allPayments) {
+    if (pay.paymentType !== "received" || pay.journalEntryId) continue;
+    const amount = parseFloat(pay.amount ?? "0");
+    if (amount <= 0) continue;
+
+    const month = parseInt(pay.paymentDate.slice(5, 7), 10);
+    const periodId = periodIdsByMonth.get(month)!;
+
+    const [je] = await db
+      .insert(journalEntries)
+      .values({
+        organizationId, periodId, entryNumber: entryNum(month),
+        entryDate: pay.paymentDate, description: `Payment received ${pay.paymentNumber}`,
+        reference: pay.id, sourceType: "payment_received", sourceId: pay.id,
+        status: "posted", currency: cur, isDemo: true,
+        totalDebit: String(amount), totalCredit: String(amount), postedAt: new Date(),
+      })
+      .returning({ id: journalEntries.id });
+
+    if (je) {
+      await db.insert(journalLines).values([
+        { journalEntryId: je.id, organizationId, accountId: acc("1110"), debit: String(amount), credit: "0", currency: cur, baseCurrencyDebit: String(amount), baseCurrencyCredit: "0", lineOrder: 1 },
+        { journalEntryId: je.id, organizationId, accountId: arId, debit: "0", credit: String(amount), currency: cur, baseCurrencyDebit: "0", baseCurrencyCredit: String(amount), lineOrder: 2 },
+      ]);
+      await db.update(payments).set({ journalEntryId: je.id }).where(eq(payments.id, pay.id));
+      payJeCount++;
+    }
+  }
+
+  console.log(`Journal entries: capital(1) + rent(12) + salary(12) + invoices(${invJeCount}) + bills(${billJeCount}) + bill-payments + payment-received(${payJeCount})`);
 }
 
 async function seedVat(ctx: SeedContext): Promise<void> {
@@ -993,6 +1152,17 @@ export async function removeDemoDataOnly(organizationId: string): Promise<void> 
   // Delete in FK-safe order, only where is_demo = true
   await db.delete(inventoryMovements).where(and(eq(inventoryMovements.organizationId, organizationId), eq(inventoryMovements.isDemo, true)));
   await db.delete(vatReturns).where(and(eq(vatReturns.organizationId, organizationId), eq(vatReturns.isDemo, true)));
+  // Delete credit notes and expenses (lines cascade via FK)
+  const demoCnIds = (await db.select({ id: creditNotes.id }).from(creditNotes).where(and(eq(creditNotes.organizationId, organizationId), eq(creditNotes.isDemo, true)))).map((r: { id: string }) => r.id);
+  if (demoCnIds.length > 0) {
+    await db.delete(creditNoteLines).where(inArray(creditNoteLines.creditNoteId, demoCnIds));
+    await db.delete(creditNotes).where(inArray(creditNotes.id, demoCnIds));
+  }
+  const demoExpIds = (await db.select({ id: expenses.id }).from(expenses).where(and(eq(expenses.organizationId, organizationId), eq(expenses.isDemo, true)))).map((r: { id: string }) => r.id);
+  if (demoExpIds.length > 0) {
+    await db.delete(expenseLines).where(inArray(expenseLines.expenseId, demoExpIds));
+    await db.delete(expenses).where(inArray(expenses.id, demoExpIds));
+  }
   const demoJeIds = (await db.select({ id: journalEntries.id }).from(journalEntries).where(and(eq(journalEntries.organizationId, organizationId), eq(journalEntries.isDemo, true)))).map((r) => r.id);
   if (demoJeIds.length > 0) {
     await db.delete(journalLines).where(inArray(journalLines.journalEntryId, demoJeIds));
@@ -1046,6 +1216,17 @@ export async function removeDemoDataOnly(organizationId: string): Promise<void> 
 export async function removeDemoData(organizationId: string): Promise<void> {
   await db.delete(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId));
   await db.delete(vatReturns).where(eq(vatReturns.organizationId, organizationId));
+  // Delete credit notes and expenses before journal entries (they reference JE)
+  const cnIds = (await db.select({ id: creditNotes.id }).from(creditNotes).where(eq(creditNotes.organizationId, organizationId))).map((r: { id: string }) => r.id);
+  if (cnIds.length > 0) {
+    await db.delete(creditNoteLines).where(inArray(creditNoteLines.creditNoteId, cnIds));
+    await db.delete(creditNotes).where(inArray(creditNotes.id, cnIds));
+  }
+  const expIds = (await db.select({ id: expenses.id }).from(expenses).where(eq(expenses.organizationId, organizationId))).map((r: { id: string }) => r.id);
+  if (expIds.length > 0) {
+    await db.delete(expenseLines).where(inArray(expenseLines.expenseId, expIds));
+    await db.delete(expenses).where(inArray(expenses.id, expIds));
+  }
   await db.delete(journalLines).where(eq(journalLines.organizationId, organizationId));
   await db.delete(journalEntries).where(eq(journalEntries.organizationId, organizationId));
   await db.delete(payments).where(eq(payments.organizationId, organizationId));

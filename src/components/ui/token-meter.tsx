@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Coins } from "lucide-react";
+import { Coins, Crown } from "lucide-react";
 import Link from "next/link";
 import {
   Tooltip,
@@ -31,7 +31,25 @@ export function TokenMeter() {
       .catch(() => {});
   }, []);
 
-  if (balance === null) return null;
+  // Free-plan users: show upgrade chip instead of token meter
+  if (balance === null || plan === "FREE") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href="/settings"
+            className="flex items-center gap-1.5 rounded-xl bg-accent-yellow/10 px-3 py-1.5 text-[12px] font-semibold text-accent-yellow transition-all hover:bg-accent-yellow/20 hover:shadow-sm"
+          >
+            <Crown className="h-3.5 w-3.5" />
+            Upgrade to Pro
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-[12px]">
+          Get 150 AI tokens/month + unlimited scans
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   const limit = PLAN_LIMITS[plan] ?? 50;
   const pct = Math.min(100, Math.round((balance / limit) * 100));

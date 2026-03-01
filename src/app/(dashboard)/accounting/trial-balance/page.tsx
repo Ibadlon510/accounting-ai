@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -11,11 +12,20 @@ const categoryColors: Record<string, string> = {
   expense: "text-red-600",
 };
 
+type TBRow = { accountCode: string; accountName: string; accountCategory: string; debit: number; credit: number };
+
 export default function TrialBalancePage() {
-  // No real journal entry data yet - show empty state
-  const rows: { accountCode: string; accountName: string; accountCategory: string; debit: number; credit: number }[] = [];
-  const totalDebit = 0;
-  const totalCredit = 0;
+  const [rows, setRows] = useState<TBRow[]>([]);
+
+  useEffect(() => {
+    fetch("/api/accounting/trial-balance", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((d) => setRows(d.rows ?? []))
+      .catch(() => {});
+  }, []);
+
+  const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
+  const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
   return (

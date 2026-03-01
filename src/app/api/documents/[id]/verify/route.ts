@@ -19,6 +19,8 @@ import {
   payments,
   paymentAllocations,
   bankAccounts,
+  creditNotes,
+  creditNoteLines,
 } from "@/lib/db/schema";
 import { eq, and, lte, gte, count } from "drizzle-orm";
 import { moveToRetentionVault, isVaultConfigured } from "@/lib/storage/vault";
@@ -153,6 +155,7 @@ async function handleExpense(
     merchantName: string;
     supplierId?: string;
     glAccountId?: string;
+    bankAccountId?: string;
     lines?: ExpenseLineInput[];
     subtotal?: number;
     taxAmount?: number;
@@ -170,6 +173,20 @@ async function handleExpense(
 
   if (!date || !merchantName?.trim()) {
     return NextResponse.json({ error: "Missing: date, merchantName" }, { status: 400 });
+  }
+
+  // Resolve bank/cash account for the credit side (expense is a direct payment)
+  let cashAccountId: string | null = null;
+  if (body.bankAccountId) {
+    const [ba] = await db.select({ ledgerAccountId: bankAccounts.ledgerAccountId }).from(bankAccounts).where(and(eq(bankAccounts.id, body.bankAccountId), eq(bankAccounts.organizationId, orgId))).limit(1);
+    cashAccountId = ba?.ledgerAccountId ?? null;
+  }
+  if (!cashAccountId) {
+    const [cashAcct] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1010"))).limit(1);
+    cashAccountId = cashAcct?.id ?? null;
+  }
+  if (!cashAccountId) {
+    return NextResponse.json({ error: "Chart of accounts missing cash (1010) or bank ledger" }, { status: 400 });
   }
   if (typeof totalAmount !== "number" || totalAmount <= 0) {
     return NextResponse.json({ error: "Invalid total amount" }, { status: 400 });
@@ -326,22 +343,40 @@ async function handleExpense(
         }
       }
 
-      const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
-      if (apAccount) {
-        jl.push({
-          journalEntryId: je.id,
-          organizationId: orgId,
-          accountId: apAccount.id,
-          description: `Payable — ${merchantName.trim()}`,
-          debit: "0",
-          credit: String(totalAmount),
-          currency,
-          baseCurrencyDebit: "0",
-          baseCurrencyCredit: String(totalAmount),
-          lineOrder: lineOrder++,
-        });
-      }
+      // Credit Bank/Cash instead of AP — expenses are direct payments
+      jl.push({
+        journalEntryId: je.id,
+        organizationId: orgId,
+        accountId: cashAccountId!,
+        description: `Payment — ${merchantName.trim()}`,
+        debit: "0",
+        credit: String(totalAmount),
+        currency,
+        baseCurrencyDebit: "0",
+        baseCurrencyCredit: String(totalAmount),
+        lineOrder: lineOrder++,
+      });
       if (jl.length > 0) await db.insert(journalLines).values(jl);
+    }
+  }
+
+  // Create bank transaction (debit) so expense appears in banking section
+  if (body.bankAccountId) {
+    await db.insert(bankTransactions).values({
+      organizationId: orgId,
+      bankAccountId: body.bankAccountId,
+      transactionDate: date,
+      description: `Expense — ${merchantName.trim()}`,
+      amount: String(totalAmount),
+      type: "debit",
+      reference: documentId,
+      category: "expense",
+    });
+    // Update bank account balance
+    const [acc] = await db.select({ currentBalance: bankAccounts.currentBalance }).from(bankAccounts).where(eq(bankAccounts.id, body.bankAccountId)).limit(1);
+    if (acc) {
+      const bal = parseFloat(acc.currentBalance ?? "0") - totalAmount;
+      await db.update(bankAccounts).set({ currentBalance: String(bal) }).where(eq(bankAccounts.id, body.bankAccountId));
     }
   }
 
@@ -351,7 +386,7 @@ async function handleExpense(
   });
 
   const session = await auth();
-  await db.insert(auditLogs).values({ organizationId: orgId, userId: session?.user?.id, action: "document_verified", entity: "documents", entityId: documentId, metadata: { merchantName: merchantName.trim(), glAccountId: firstGlId } });
+  await db.insert(auditLogs).values({ organizationId: orgId, userId: session?.user?.id, action: "document_verified", entity: "documents", entityId: documentId, metadata: { merchantName: merchantName.trim(), glAccountId: firstGlId, bankAccountId: body.bankAccountId } });
 
   return NextResponse.json({ ok: true });
 }
@@ -959,176 +994,65 @@ async function handleCreditNote(
     return NextResponse.json({ error: "Missing: creditNoteType, date, lines, subtotal, total" }, { status: 400 });
   }
 
-  await moveToVaultAndMarkProcessed(doc, documentId, orgId);
-
-  const periodId = await resolveOrCreatePeriod(orgId, date);
-
-  if (creditNoteType === "sales") {
-    const { customerId, customerName, creditNoteNumber, linkedInvoiceId } = body;
-    if (!customerId) return NextResponse.json({ error: "Missing customerId for sales credit note" }, { status: 400 });
-
-    const cnNum = creditNoteNumber?.trim() || `CN-S-${date.slice(0, 7).replace("-", "")}-${Date.now().toString(36)}`;
-
-    const [inv] = await db
-      .insert(invoices)
-      .values({
-        organizationId: orgId,
-        customerId,
-        invoiceNumber: cnNum,
-        issueDate: date,
-        dueDate: date,
-        status: "paid",
-        currency: "AED",
-        subtotal: String(-subtotal),
-        taxAmount: String(-(taxAmount ?? 0)),
-        total: String(-total),
-        amountPaid: String(-total),
-        amountDue: "0",
-        notes: `Credit note${linkedInvoiceId ? ` against invoice` : ""}`,
-        documentId,
-      })
-      .returning({ id: invoices.id });
-
-    if (!inv) return NextResponse.json({ error: "Failed to create credit note invoice" }, { status: 500 });
-
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      await db.insert(invoiceLines).values({
-        invoiceId: inv.id,
-        description: l.description || "Credit line",
-        quantity: String(l.quantity ?? 1),
-        unitPrice: String(l.unitPrice ?? 0),
-        amount: String(l.amount ?? 0),
-        taxRate: String(l.taxRate ?? 5),
-        taxAmount: String(l.taxAmount ?? 0),
-        lineOrder: i + 1,
-      });
-    }
-
-    if (linkedInvoiceId) {
-      const [origInv] = await db.select({ amountDue: invoices.amountDue, total: invoices.total }).from(invoices).where(and(eq(invoices.id, linkedInvoiceId), eq(invoices.organizationId, orgId))).limit(1);
-      if (origInv) {
-        const newDue = Math.max(0, parseFloat(origInv.amountDue ?? "0") - total);
-        const newPaid = parseFloat(origInv.total ?? "0") - newDue;
-        await db.update(invoices).set({ amountPaid: String(newPaid), amountDue: String(newDue) }).where(eq(invoices.id, linkedInvoiceId));
-      }
-    }
-
-    if (periodId) {
-      const [arAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
-      const [salesAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "4000"))).limit(1);
-      const [vatAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
-
-      if (arAccount && salesAccount) {
-        const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
-        const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
-        const entryNumber = `JE-${date.slice(0, 7).replace("-", "")}-${seq}`;
-
-        const [je] = await db
-          .insert(journalEntries)
-          .values({
-            organizationId: orgId,
-            periodId,
-            entryNumber,
-            entryDate: date,
-            description: `Sales Credit Note ${cnNum} — ${customerName ?? "customer"}`,
-            reference: inv.id,
-            sourceType: "credit_note",
-            sourceId: inv.id,
-            status: "posted",
-            currency: "AED",
-            totalDebit: String(total),
-            totalCredit: String(total),
-            postedAt: new Date(),
-          })
-          .returning({ id: journalEntries.id });
-
-        if (je) {
-          const jl: (typeof journalLines.$inferInsert)[] = [];
-          jl.push({
-            journalEntryId: je.id,
-            organizationId: orgId,
-            accountId: salesAccount.id,
-            description: `Revenue reversal — ${customerName ?? "customer"}`,
-            debit: String(subtotal),
-            credit: "0",
-            currency: "AED",
-            baseCurrencyDebit: String(subtotal),
-            baseCurrencyCredit: "0",
-            lineOrder: 1,
-          });
-          if (taxAmount > 0 && vatAccount) {
-            jl.push({
-              journalEntryId: je.id,
-              organizationId: orgId,
-              accountId: vatAccount.id,
-              description: `VAT output reversal — ${customerName ?? "customer"}`,
-              debit: String(taxAmount),
-              credit: "0",
-              currency: "AED",
-              baseCurrencyDebit: String(taxAmount),
-              baseCurrencyCredit: "0",
-              taxCode: "VAT5",
-              taxAmount: String(taxAmount),
-              lineOrder: 2,
-            });
-          }
-          jl.push({
-            journalEntryId: je.id,
-            organizationId: orgId,
-            accountId: arAccount.id,
-            description: `AR reversal — ${customerName ?? "customer"}`,
-            debit: "0",
-            credit: String(total),
-            currency: "AED",
-            baseCurrencyDebit: "0",
-            baseCurrencyCredit: String(total),
-            lineOrder: 3,
-          });
-          await db.insert(journalLines).values(jl);
-        }
-        await db.update(invoices).set({ journalEntryId: je?.id }).where(eq(invoices.id, inv.id));
-      }
-    }
-
-    const session = await auth();
-    await db.insert(auditLogs).values({ organizationId: orgId, userId: session?.user?.id, action: "document_verified", entity: "documents", entityId: documentId, metadata: { documentType: "credit_note", creditNoteType: "sales", invoiceId: inv.id } });
-    return NextResponse.json({ ok: true });
+  if (creditNoteType === "sales" && !body.customerId) {
+    return NextResponse.json({ error: "Missing customerId for sales credit note" }, { status: 400 });
+  }
+  if (creditNoteType === "purchase" && !body.supplierId) {
+    return NextResponse.json({ error: "Missing supplierId for purchase credit note" }, { status: 400 });
   }
 
-  // Purchase credit note — reverses AP
-  const { supplierId, supplierName, creditNoteNumber, linkedBillId } = body;
-  if (!supplierId) return NextResponse.json({ error: "Missing supplierId for purchase credit note" }, { status: 400 });
+  await moveToVaultAndMarkProcessed(doc, documentId, orgId);
 
-  const cnNum = creditNoteNumber?.trim() || `CN-P-${date.slice(0, 7).replace("-", "")}-${Date.now().toString(36)}`;
+  const prefix = creditNoteType === "sales" ? "SCN" : "PCN";
+  const ym = date.slice(0, 7).replace("-", "");
+  const cnNumInput = body.creditNoteNumber?.trim();
+  let creditNoteNumber: string;
+  if (cnNumInput) {
+    creditNoteNumber = cnNumInput;
+  } else {
+    const [countRow] = await db.select({ c: count() }).from(creditNotes).where(eq(creditNotes.organizationId, orgId));
+    const seq = (Number(countRow?.c ?? 0) + 1).toString().padStart(4, "0");
+    creditNoteNumber = `${prefix}-${ym}-${seq}`;
+  }
 
-  const [bill] = await db
-    .insert(bills)
+  const entityName = creditNoteType === "sales"
+    ? (body.customerName?.trim() || "Customer")
+    : (body.supplierName?.trim() || "Supplier");
+
+  // Insert into credit_notes table
+  const [cn] = await db
+    .insert(creditNotes)
     .values({
       organizationId: orgId,
-      supplierId,
-      billNumber: cnNum,
-      issueDate: date,
-      dueDate: date,
-      status: "paid",
+      creditNoteNumber,
+      creditNoteType,
+      date,
+      customerId: body.customerId || null,
+      supplierId: body.supplierId || null,
+      invoiceId: body.linkedInvoiceId || null,
+      billId: body.linkedBillId || null,
+      reason: `Document verified — ${entityName}`,
+      subtotal: String(subtotal),
+      taxAmount: String(taxAmount ?? 0),
+      total: String(total),
       currency: "AED",
-      subtotal: String(-subtotal),
-      taxAmount: String(-(taxAmount ?? 0)),
-      total: String(-total),
-      amountPaid: String(-total),
-      amountDue: "0",
-      notes: `Credit note${linkedBillId ? ` against bill` : ""}`,
+      status: "confirmed",
       documentId,
     })
-    .returning({ id: bills.id });
+    .returning({ id: creditNotes.id });
 
-  if (!bill) return NextResponse.json({ error: "Failed to create credit note bill" }, { status: 500 });
+  if (!cn) return NextResponse.json({ error: "Failed to create credit note" }, { status: 500 });
+
+  // Insert credit note lines — use a default revenue/expense account if no per-line accountId
+  const defaultAccountCode = creditNoteType === "sales" ? "4000" : "6300";
+  const [defaultAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, defaultAccountCode))).limit(1);
 
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    await db.insert(billLines).values({
-      billId: bill.id,
+    await db.insert(creditNoteLines).values({
+      creditNoteId: cn.id,
       description: l.description || "Credit line",
+      accountId: defaultAccount?.id ?? "",
       quantity: String(l.quantity ?? 1),
       unitPrice: String(l.unitPrice ?? 0),
       amount: String(l.amount ?? 0),
@@ -1138,94 +1062,129 @@ async function handleCreditNote(
     });
   }
 
-  if (linkedBillId) {
-    const [origBill] = await db.select({ amountDue: bills.amountDue, total: bills.total }).from(bills).where(and(eq(bills.id, linkedBillId), eq(bills.organizationId, orgId))).limit(1);
+  // Reduce amount due on linked invoice/bill
+  if (creditNoteType === "sales" && body.linkedInvoiceId) {
+    const [origInv] = await db.select({ amountDue: invoices.amountDue }).from(invoices).where(and(eq(invoices.id, body.linkedInvoiceId), eq(invoices.organizationId, orgId))).limit(1);
+    if (origInv) {
+      const newDue = Math.max(0, parseFloat(origInv.amountDue ?? "0") - total);
+      await db.update(invoices).set({ amountDue: String(newDue) }).where(eq(invoices.id, body.linkedInvoiceId));
+    }
+  }
+  if (creditNoteType === "purchase" && body.linkedBillId) {
+    const [origBill] = await db.select({ amountDue: bills.amountDue }).from(bills).where(and(eq(bills.id, body.linkedBillId), eq(bills.organizationId, orgId))).limit(1);
     if (origBill) {
       const newDue = Math.max(0, parseFloat(origBill.amountDue ?? "0") - total);
-      const newPaid = parseFloat(origBill.total ?? "0") - newDue;
-      await db.update(bills).set({ amountPaid: String(newPaid), amountDue: String(newDue) }).where(eq(bills.id, linkedBillId));
+      await db.update(bills).set({ amountDue: String(newDue) }).where(eq(bills.id, body.linkedBillId));
     }
   }
 
+  // Create journal entry
+  const periodId = await resolveOrCreatePeriod(orgId, date);
+  let journalEntryId: string | null = null;
+
   if (periodId) {
-    const [expenseAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "6300"))).limit(1);
-    const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
-    const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
+    const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
+    const jeSeq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
+    const entryNumber = `JE-${ym}-${jeSeq}`;
 
-    if (apAccount && expenseAccount) {
-      const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
-      const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
-      const entryNumber = `JE-${date.slice(0, 7).replace("-", "")}-${seq}`;
+    const [je] = await db
+      .insert(journalEntries)
+      .values({
+        organizationId: orgId,
+        periodId,
+        entryNumber,
+        entryDate: date,
+        description: `Credit Note ${creditNoteNumber} — ${entityName}`,
+        reference: cn.id,
+        sourceType: "credit_note",
+        sourceId: cn.id,
+        status: "posted",
+        currency: "AED",
+        totalDebit: String(total),
+        totalCredit: String(total),
+        postedAt: new Date(),
+      })
+      .returning({ id: journalEntries.id });
 
-      const [je] = await db
-        .insert(journalEntries)
-        .values({
-          organizationId: orgId,
-          periodId,
-          entryNumber,
-          entryDate: date,
-          description: `Purchase Credit Note ${cnNum} — ${supplierName ?? "supplier"}`,
-          reference: bill.id,
-          sourceType: "credit_note",
-          sourceId: bill.id,
-          status: "posted",
-          currency: "AED",
-          totalDebit: String(total),
-          totalCredit: String(total),
-          postedAt: new Date(),
-        })
-        .returning({ id: journalEntries.id });
+    if (je) {
+      journalEntryId = je.id;
+      const jl: (typeof journalLines.$inferInsert)[] = [];
+      let lineOrder = 1;
 
-      if (je) {
-        const jl: (typeof journalLines.$inferInsert)[] = [];
-        let lineOrder = 1;
-        jl.push({
-          journalEntryId: je.id,
-          organizationId: orgId,
-          accountId: apAccount.id,
-          description: `AP reversal — ${supplierName ?? "supplier"}`,
-          debit: String(total),
-          credit: "0",
-          currency: "AED",
-          baseCurrencyDebit: String(total),
-          baseCurrencyCredit: "0",
-          lineOrder: lineOrder++,
-        });
-        jl.push({
-          journalEntryId: je.id,
-          organizationId: orgId,
-          accountId: expenseAccount.id,
-          description: `Expense reversal — ${supplierName ?? "supplier"}`,
-          debit: "0",
-          credit: String(subtotal),
-          currency: "AED",
-          baseCurrencyDebit: "0",
-          baseCurrencyCredit: String(subtotal),
-          lineOrder: lineOrder++,
-        });
-        if (taxAmount > 0 && vatInputAccount) {
+      if (creditNoteType === "sales") {
+        // Sales CN: Dr Revenue, Dr VAT Output → Cr AR
+        const [arAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
+        const [salesAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "4000"))).limit(1);
+        const [vatAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
+
+        if (salesAccount) {
           jl.push({
-            journalEntryId: je.id,
-            organizationId: orgId,
-            accountId: vatInputAccount.id,
-            description: `VAT input reversal — ${supplierName ?? "supplier"}`,
-            debit: "0",
-            credit: String(taxAmount),
-            currency: "AED",
-            baseCurrencyDebit: "0",
-            baseCurrencyCredit: String(taxAmount),
-            taxCode: "VAT5",
-            taxAmount: String(taxAmount),
-            lineOrder: lineOrder++,
+            journalEntryId: je.id, organizationId: orgId, accountId: salesAccount.id,
+            description: `Revenue reversal — ${entityName}`,
+            debit: String(subtotal), credit: "0", currency: "AED",
+            baseCurrencyDebit: String(subtotal), baseCurrencyCredit: "0", lineOrder: lineOrder++,
           });
         }
-        await db.insert(journalLines).values(jl);
+        if (taxAmount > 0 && vatAccount) {
+          jl.push({
+            journalEntryId: je.id, organizationId: orgId, accountId: vatAccount.id,
+            description: `VAT output reversal — ${entityName}`,
+            debit: String(taxAmount), credit: "0", currency: "AED",
+            baseCurrencyDebit: String(taxAmount), baseCurrencyCredit: "0",
+            taxCode: "VAT5", taxAmount: String(taxAmount), lineOrder: lineOrder++,
+          });
+        }
+        if (arAccount) {
+          jl.push({
+            journalEntryId: je.id, organizationId: orgId, accountId: arAccount.id,
+            description: `AR reversal — ${entityName}`,
+            debit: "0", credit: String(total), currency: "AED",
+            baseCurrencyDebit: "0", baseCurrencyCredit: String(total), lineOrder: lineOrder++,
+          });
+        }
+      } else {
+        // Purchase CN: Dr AP → Cr Expense, Cr VAT Input
+        const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
+        const [expenseAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "6300"))).limit(1);
+        const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+
+        if (apAccount) {
+          jl.push({
+            journalEntryId: je.id, organizationId: orgId, accountId: apAccount.id,
+            description: `AP reversal — ${entityName}`,
+            debit: String(total), credit: "0", currency: "AED",
+            baseCurrencyDebit: String(total), baseCurrencyCredit: "0", lineOrder: lineOrder++,
+          });
+        }
+        if (expenseAccount) {
+          jl.push({
+            journalEntryId: je.id, organizationId: orgId, accountId: expenseAccount.id,
+            description: `Expense reversal — ${entityName}`,
+            debit: "0", credit: String(subtotal), currency: "AED",
+            baseCurrencyDebit: "0", baseCurrencyCredit: String(subtotal), lineOrder: lineOrder++,
+          });
+        }
+        if (taxAmount > 0 && vatInputAccount) {
+          jl.push({
+            journalEntryId: je.id, organizationId: orgId, accountId: vatInputAccount.id,
+            description: `VAT input reversal — ${entityName}`,
+            debit: "0", credit: String(taxAmount), currency: "AED",
+            baseCurrencyDebit: "0", baseCurrencyCredit: String(taxAmount),
+            taxCode: "VAT5", taxAmount: String(taxAmount), lineOrder: lineOrder++,
+          });
+        }
       }
-      await db.update(bills).set({ journalEntryId: je?.id }).where(eq(bills.id, bill.id));
+
+      if (jl.length > 0) await db.insert(journalLines).values(jl);
     }
+  }
+
+  // Link JE to credit note
+  if (journalEntryId) {
+    await db.update(creditNotes).set({ journalEntryId }).where(eq(creditNotes.id, cn.id));
   }
 
   const session = await auth();
-  await db.insert(auditLogs).values({ organizationId: orgId, userId: session?.user?.id, action: "document_verified", entity: "documents", entityId: documentId, metadata: { documentType: "credit_note", creditNoteType: "purchase", billId: bill.id } });
-  return NextResponse.json({ ok: true });
+  await db.insert(auditLogs).values({ organizationId: orgId, userId: session?.user?.id, action: "document_verified", entity: "documents", entityId: documentId, metadata: { documentType: "credit_note", creditNoteType, creditNoteId: cn.id } });
+  return NextResponse.json({ ok: true, creditNote: { id: cn.id, creditNoteNumber } });
 }

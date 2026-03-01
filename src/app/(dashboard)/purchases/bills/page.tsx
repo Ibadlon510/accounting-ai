@@ -35,6 +35,7 @@ export default function BillsPage() {
   const [paymentBillId, setPaymentBillId] = useState<string | null>(null);
   const [viewingPaymentId, setViewingPaymentId] = useState<string | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function loadBills() {
     fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
@@ -96,6 +97,29 @@ export default function BillsPage() {
             setViewingId(null);
             setPaymentOpen(true);
           }}
+          onConfirm={async () => {
+            if (!viewingId) return;
+            setConfirmingId(viewingId);
+            try {
+              const res = await fetch(`/api/purchases/bills/${viewingId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "received" }),
+              });
+              const json = await res.json();
+              if (!res.ok) {
+                const { showError } = await import("@/lib/utils/toast-helpers");
+                showError(json.error ?? "Failed to confirm bill");
+                return;
+              }
+              const { showSuccess } = await import("@/lib/utils/toast-helpers");
+              showSuccess("Bill confirmed", "Journal entry created. You can now record payments.");
+              loadBills();
+            } finally {
+              setConfirmingId(null);
+            }
+          }}
+          confirming={!!viewingId && confirmingId === viewingId}
         />
         <ViewPaymentPanel
           open={!!viewingPaymentId}

@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   const cookieStore = await cookies();
   cookieStore.set(CURRENT_ORG_COOKIE, organizationId, {
-    httpOnly: true,
+    httpOnly: false,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: COOKIE_MAX_AGE,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -14,13 +15,13 @@ import {
   BarChart3,
   Receipt,
   Settings,
-  Bell,
   Grid3X3,
   FolderOpen,
   LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { comingSoon } from "@/lib/utils/toast-helpers";
+import { NotificationCenter } from "@/components/notifications/notification-center";
 import {
   Tooltip,
   TooltipContent,
@@ -54,6 +55,16 @@ export function TopNav() {
   const { data: session } = useSession();
   const userName = session?.user?.name || "User";
   const userInitials = userName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+  const [userRole, setUserRole] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/org/current", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.role) setUserRole(data.role.charAt(0).toUpperCase() + data.role.slice(1));
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSignOut() {
     await signOut({ callbackUrl: "/login" });
@@ -128,7 +139,7 @@ export function TopNav() {
             {userName}
           </p>
           <p className="text-[11px] leading-tight text-text-meta">
-            Admin
+            {userRole || "—"}
           </p>
         </div>
         <DropdownMenu>
@@ -157,9 +168,7 @@ export function TopNav() {
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex items-center gap-0.5">
-          <button onClick={() => comingSoon("Notifications")} className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary">
-            <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
-          </button>
+          <NotificationCenter />
           <Link href="/settings" className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary">
             <Settings className="h-[18px] w-[18px]" strokeWidth={1.8} />
           </Link>

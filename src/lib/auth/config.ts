@@ -1,6 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 declare module "next-auth" {
   interface Session {
@@ -20,17 +21,23 @@ declare module "next-auth" {
 
 const UNVERIFIED_SESSION_SECONDS = 5 * 60; // 5 minutes
 
+/** OAuth provider IDs that use the same DB upsert logic */
+const OAUTH_PROVIDERS = ["google", "microsoft-entra-id"];
+
+const MAGIC_LINK_IDENTIFIER_PREFIX = "magic-link:";
+
 /**
  * Auth config — NO adapter, NO static DB imports.
  * Safe to evaluate at build time and in Edge middleware.
  * Uses JWT sessions so no DB-backed session storage is needed.
- * Google OAuth user creation is handled in the signIn callback.
+ * OAuth user creation is handled in the signIn callback.
  */
 export const authConfig: NextAuthConfig = {
+  debug: true, // Temporary — shows detailed auth errors in server console
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
-    newUser: "/onboarding",
+    newUser: "/workspaces",
     error: "/login",
   },
   providers: [
@@ -40,6 +47,106 @@ export const authConfig: NextAuthConfig = {
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         })]
       : []),
+    ...(process.env.MICROSOFT_ENTRA_ID_ID && process.env.MICROSOFT_ENTRA_ID_SECRET
+      ? [MicrosoftEntraID({
+          clientId: process.env.MICROSOFT_ENTRA_ID_ID,
+          clientSecret: process.env.MICROSOFT_ENTRA_ID_SECRET,
+          issuer: `https://login.microsoftonline.com/${process.env.MICROSOFT_ENTRA_ID_TENANT_ID ?? "common"}/v2.0`,
+        })]
+      : []),
+    Credentials({
+      id: "magic-link",
+      name: "Magic Link",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        token: { label: "Token", type: "text" },
+      },
+      async authorize(credentials) {
+        const email = (credentials?.email as string | undefined)?.trim().toLowerCase();
+        const token = credentials?.token as string | undefined;
+        if (!email || !token) return null;
+
+        const { db } = await import("@/lib/db");
+        const { users, verificationTokens } = await import("@/lib/db/schema");
+        const { eq, and } = await import("drizzle-orm");
+
+        // Use Web Crypto API (Edge-compatible) instead of Node crypto
+        const encoder = new TextEncoder();
+        const data = encoder.encode(token);
+        const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashedToken = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        const identifier = `${MAGIC_LINK_IDENTIFIER_PREFIX}${email}`;
+
+        const [record] = await db
+          .select()
+          .from(verificationTokens)
+          .where(and(
+            eq(verificationTokens.identifier, identifier),
+            eq(verificationTokens.token, hashedToken),
+          ))
+          .limit(1);
+
+        if (!record || record.expires < new Date()) {
+          // Clean up expired token if it exists
+          if (record) {
+            await db.delete(verificationTokens).where(and(
+              eq(verificationTokens.identifier, identifier),
+              eq(verificationTokens.token, hashedToken),
+            ));
+          }
+          return null;
+        }
+
+        // Delete the used token
+        await db.delete(verificationTokens).where(and(
+          eq(verificationTokens.identifier, identifier),
+          eq(verificationTokens.token, hashedToken),
+        ));
+
+        // Find or create user
+        const [existing] = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1);
+
+        if (existing) {
+          // Mark email as verified if not already
+          if (!existing.emailVerified) {
+            await db.update(users)
+              .set({ emailVerified: new Date() })
+              .where(eq(users.id, existing.id));
+          }
+          return {
+            id: existing.id,
+            email: existing.email,
+            name: existing.name,
+            image: existing.image ?? existing.avatarUrl,
+            emailVerified: existing.emailVerified ?? new Date(),
+          };
+        }
+
+        // Create new user — email is verified by magic link
+        const [created] = await db
+          .insert(users)
+          .values({
+            email,
+            name: email.split("@")[0],
+            emailVerified: new Date(),
+          })
+          .returning({ id: users.id });
+
+        if (!created) return null;
+
+        return {
+          id: created.id,
+          email,
+          name: email.split("@")[0],
+          emailVerified: new Date(),
+        };
+      },
+    }),
     Credentials({
       name: "credentials",
       credentials: {
@@ -80,8 +187,8 @@ export const authConfig: NextAuthConfig = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For Google OAuth: create or find the user in our DB
-      if (account?.provider === "google" && user.email) {
+      // For OAuth providers: create or find the user in our DB
+      if (account?.provider && OAUTH_PROVIDERS.includes(account.provider) && user.email) {
         const { db } = await import("@/lib/db");
         const { users } = await import("@/lib/db/schema");
         const { eq } = await import("drizzle-orm");
@@ -119,9 +226,9 @@ export const authConfig: NextAuthConfig = {
         token.emailVerified = user.emailVerified ?? null;
       }
 
-      // For Google OAuth: always resolve the DB UUID (not the Google sub ID)
-      // This ensures both new and returning Google users get the correct DB id
-      if (account?.provider === "google" && user?.email) {
+      // For OAuth providers: always resolve the DB UUID (not the provider's sub ID)
+      // This ensures both new and returning OAuth users get the correct DB id
+      if (account?.provider && OAUTH_PROVIDERS.includes(account.provider) && user?.email) {
         const { db } = await import("@/lib/db");
         const { users } = await import("@/lib/db/schema");
         const { eq } = await import("drizzle-orm");
