@@ -5,11 +5,13 @@ import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SkeletonTable } from "@/components/ui/skeleton-card";
 import { CreateInvoicePanel } from "@/components/modals/create-invoice-panel";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import { ViewInvoicePanel } from "@/components/overlays/view-invoice-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordPaymentPanel } from "@/components/modals/record-payment-panel";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type InvoiceLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
@@ -37,11 +39,13 @@ export default function InvoicesPage() {
   const [viewingPaymentId, setViewingPaymentId] = useState<string | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  usePageTitle("Invoices");
 
   function loadInvoices() {
     fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch((err) => {
       console.error("[invoices] fetch error:", err);
-    });
+    }).finally(() => setLoading(false));
   }
 
   function loadCustomers() {
@@ -171,6 +175,9 @@ export default function InvoicesPage() {
         />
       </div>
 
+      {loading ? (
+        <SkeletonTable rows={8} cols={7} />
+      ) : (
       <div className="dashboard-card overflow-hidden !p-0">
         <div className="grid grid-cols-12 gap-4 border-b border-border-subtle bg-canvas/50 px-6 py-3 text-[12px] font-medium uppercase tracking-wide text-text-meta">
           <div className="col-span-2">Invoice #</div>
@@ -181,6 +188,13 @@ export default function InvoicesPage() {
           <div className="col-span-2 text-right">Total</div>
           <div className="col-span-2 text-right">Balance Due</div>
         </div>
+
+        {filtered.length === 0 && (
+          <div className="py-12 text-center">
+            <p className="text-[15px] font-medium text-text-primary">No invoices found</p>
+            <p className="mt-1 text-[13px] text-text-secondary">Create your first invoice to get started.</p>
+          </div>
+        )}
 
         {filtered.map((inv) => (
           <button
@@ -204,6 +218,7 @@ export default function InvoicesPage() {
           </button>
         ))}
       </div>
+      )}
     </>
   );
 }

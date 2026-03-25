@@ -24,6 +24,8 @@ interface SkeletonRowProps {
   className?: string;
 }
 
+const COL_WIDTHS = [65, 40, 80, 55, 70, 45, 60, 50, 75, 35];
+
 export function SkeletonRow({ cols = 5, className }: SkeletonRowProps) {
   return (
     <div className={cn("flex items-center gap-4 px-6 py-3.5 animate-pulse", className)}>
@@ -31,7 +33,7 @@ export function SkeletonRow({ cols = 5, className }: SkeletonRowProps) {
         <div
           key={i}
           className="h-4 rounded-lg bg-border-subtle/50"
-          style={{ width: `${20 + Math.random() * 60}%`, flex: i === 1 ? 2 : 1 }}
+          style={{ width: `${COL_WIDTHS[i % COL_WIDTHS.length]}%`, flex: i === 1 ? 2 : 1 }}
         />
       ))}
     </div>

@@ -4,7 +4,7 @@ import path from "path";
 const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: true,
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
+  serverExternalPackages: ["puppeteer", "puppeteer-core", "@sparticuz/chromium", "postgres", "drizzle-orm"],
   async headers() {
     return [
       {

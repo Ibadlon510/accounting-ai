@@ -18,6 +18,7 @@ import { InventoryDashboard } from "@/components/dashboard/variants/inventory-da
 import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { usePageTitle } from "@/hooks/use-page-title";
 import type { InventoryMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -44,6 +45,7 @@ type Item = {
 };
 
 export default function InventoryPage() {
+  usePageTitle("Inventory");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);

@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
 import { ViewCustomerPanel } from "@/components/overlays/view-customer-panel";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type Customer = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; creditLimit: number; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 
 export default function CustomersPage() {
+  usePageTitle("Customers");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);

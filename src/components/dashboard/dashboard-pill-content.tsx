@@ -82,7 +82,29 @@ export function DashboardPillContent({ variant }: DashboardPillContentProps) {
       </div>
       <div className="space-y-6 p-4">
         {isLoading && (
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <div className="animate-pulse space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-1.5 rounded-lg border border-border-subtle/50 p-3">
+                  <div className="h-2.5 w-14 rounded bg-border-subtle/50" />
+                  <div className="h-5 w-20 rounded bg-border-subtle/40" />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-24 rounded bg-border-subtle/50" />
+              <div className="h-[120px] w-full rounded-lg bg-border-subtle/20" />
+            </div>
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5">
+                  <div className="h-4 w-4 rounded-full bg-border-subtle/40" />
+                  <div className="h-3 flex-1 rounded bg-border-subtle/30" />
+                  <div className="h-3 w-16 rounded bg-border-subtle/40" />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         {error && (
           <p className="text-sm text-destructive">Failed to load data.</p>

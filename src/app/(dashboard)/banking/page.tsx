@@ -14,6 +14,7 @@ import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferen
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { BankAccountCard } from "@/components/banking/bank-account-card";
+import { usePageTitle } from "@/hooks/use-page-title";
 import type { BankingMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -26,6 +27,7 @@ type BankAccount = { id: string; accountName: string; bankName?: string; account
 type BankTransaction = { id: string; bankAccountId: string; transactionDate: string; amount: number; type: "debit" | "credit"; isReconciled: boolean };
 
 export default function BankingDashboardPage() {
+  usePageTitle("Banking");
   const router = useRouter();
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [allTransactions, setAllTransactions] = useState<BankTransaction[]>([]);

@@ -29,8 +29,17 @@ export const metadata: Metadata = {
     "FTA compliant",
     "invoice management",
     "bank reconciliation",
+    "financial reports",
+    "expense tracking",
+    "Dubai accounting",
+    "Abu Dhabi accounting",
   ],
   authors: [{ name: "Agar Smart Accounting" }],
+  creator: "Agar Smart Accounting",
+  publisher: "Agar Smart Accounting",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
     locale: "en_AE",
@@ -64,6 +73,41 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Agar" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "Agar Smart Accounting",
+              applicationCategory: "BusinessApplication",
+              operatingSystem: "Web",
+              description:
+                "AI-powered accounting software for UAE businesses. VAT compliance, automated bookkeeping, bank reconciliation, and real-time financial insights.",
+              url: "https://agaraccounting.com",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "AED",
+                description: "Free tier available",
+              },
+              featureList: [
+                "AI-powered bookkeeping",
+                "VAT return automation",
+                "Bank reconciliation",
+                "Invoice management",
+                "Expense tracking",
+                "Real-time financial reports",
+                "FTA compliance",
+              ],
+              author: {
+                "@type": "Organization",
+                name: "Agar Smart Accounting",
+                url: "https://agaraccounting.com",
+              },
+            }),
+          }}
+        />
       </head>
       <body className={`${plusJakarta.variable} font-sans antialiased`}>
         <AuthSessionProvider>

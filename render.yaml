@@ -8,22 +8,12 @@ databases:
 services:
   - type: web
     name: accounting-ai
-    runtime: node
+    runtime: docker
     region: oregon
     plan: free
-
-    buildCommand: npm install && npm run db:migrate:deploy && npm run build && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
-    startCommand: node .next/standalone/server.js
+    dockerfilePath: ./Dockerfile
 
     envVars:
-      - key: NODE_VERSION
-        value: "20"
-      - key: HOSTNAME
-        value: "0.0.0.0"
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: "/usr/bin/chromium-browser"
-      - key: PUPPETEER_SKIP_DOWNLOAD
-        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: accounting-ai-db

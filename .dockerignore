@@ -6,5 +6,4 @@ node_modules
 *.md
 .DS_Store
 .vercel
-drizzle/meta
 tsconfig.tsbuildinfo

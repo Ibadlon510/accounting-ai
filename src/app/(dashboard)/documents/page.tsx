@@ -19,6 +19,7 @@ import { DocumentsDashboard } from "@/components/dashboard/variants/documents-da
 import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { usePageTitle } from "@/hooks/use-page-title";
 import type { DocumentsMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -46,6 +47,7 @@ const statusConfig: Record<string, { label: string; icon: typeof FileText; class
 type FilterTab = "all" | "pending" | "verified" | "flagged";
 
 export default function DocumentsPage() {
+  usePageTitle("Document Vault");
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -331,9 +333,21 @@ export default function DocumentsPage() {
       )}
 
       {loading ? (
-        <div className="dashboard-card py-12 text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border-subtle border-t-text-primary" />
-          <p className="mt-3 text-[13px] text-text-secondary">Loading documents...</p>
+        <div className="dashboard-card overflow-hidden !p-0">
+          <div className="flex items-center gap-4 border-b border-border-subtle bg-canvas/50 px-6 py-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-3 rounded bg-border-subtle/40 animate-pulse" style={{ flex: i === 2 ? 2 : 1 }} />
+            ))}
+          </div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 border-b border-border-subtle/50 px-6 py-3.5 animate-pulse">
+              <div className="h-4 w-20 rounded bg-border-subtle/40" />
+              <div className="h-5 w-16 rounded-full bg-border-subtle/30" />
+              <div className="h-4 flex-[2] rounded bg-border-subtle/30" />
+              <div className="h-4 w-12 rounded bg-border-subtle/40" />
+              <div className="h-7 w-16 rounded-lg bg-border-subtle/30" />
+            </div>
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="dashboard-card py-12 text-center">

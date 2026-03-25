@@ -10,6 +10,7 @@ import { ImportExportButtons } from "@/components/import-export/import-export-bu
 import { ViewBillPanel } from "@/components/overlays/view-bill-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordBillPaymentPanel } from "@/components/modals/record-bill-payment-panel";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type BillLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
@@ -27,6 +28,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function BillsPage() {
+  usePageTitle("Bills");
   const [search, setSearch] = useState("");
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);

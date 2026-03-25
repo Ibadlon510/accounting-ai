@@ -16,11 +16,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-# Run database migrations (DATABASE_URL must be set as a build arg or at runtime)
-# Note: On Render, migrations run via render.yaml buildCommand instead.
-COPY drizzle ./drizzle
-RUN if [ -n "$DATABASE_URL" ]; then npx drizzle-kit migrate; fi
-
 # --- Stage 3: Production runner ---
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -50,10 +45,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy drizzle migration SQL files for runtime migration
+COPY --from=builder /app/drizzle ./drizzle
+COPY docker-migrate.mjs ./docker-migrate.mjs
+
+# Entrypoint: run migrations then start server
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh
+
 USER nextjs
 
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

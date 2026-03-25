@@ -8,9 +8,11 @@ import { IncomeChart } from "@/components/charts/income-chart";
 import { ForecastBarChart } from "@/components/charts/forecast-bar-chart";
 import { ExpenseDonut } from "@/components/charts/expense-donut";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
+import { SkeletonCard } from "@/components/ui/skeleton-card";
 import { Sparkles } from "lucide-react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { useOrgConfig } from "@/hooks/use-organization";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   FileText,
   ShoppingCart,
@@ -53,6 +55,7 @@ export default function DashboardPage() {
   const currentYear = new Date().getFullYear();
   const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
   const ccy = orgConfig.currency;
+  usePageTitle("Accounting Command Center");
 
   useEffect(() => {
     fetch("/api/dashboard/stats", { cache: "no-store" })
@@ -79,6 +82,45 @@ export default function DashboardPage() {
 
       {/* Anomaly alerts will be populated from real data in a future update */}
 
+      {loading && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-12 md:gap-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="md:col-span-3"><SkeletonCard /></div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <div className="dashboard-card animate-pulse">
+                <div className="h-4 w-36 rounded bg-border-subtle/50 mb-2" />
+                <div className="h-3 w-28 rounded bg-border-subtle/30 mb-4" />
+                <div className="h-[240px] w-full rounded-xl bg-border-subtle/20" />
+              </div>
+            </div>
+            <div className="lg:col-span-4 space-y-5">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="dashboard-card animate-pulse">
+                  <div className="h-3 w-24 rounded bg-border-subtle/50 mb-2" />
+                  <div className="h-6 w-28 rounded-lg bg-border-subtle/40 mb-1" />
+                  <div className="h-3 w-16 rounded bg-border-subtle/30" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="md:col-span-6">
+                <div className="dashboard-card animate-pulse">
+                  <div className="h-4 w-28 rounded bg-border-subtle/50 mb-4" />
+                  <div className="h-[180px] w-full rounded-xl bg-border-subtle/20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && <>
       {/* Row 1: Key metrics */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-12 md:gap-5">
         <Link href="/sales" className="md:col-span-3">
@@ -318,6 +360,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      </>}
     </>
   );
 }

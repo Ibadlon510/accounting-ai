@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -7,6 +8,14 @@ import { EmailVerificationBanner } from "@/components/auth/email-verification-ba
 import { LoginUpsell } from "@/components/overlays/login-upsell";
 import { FormattingInitializer } from "@/components/providers/formatting-provider";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Dashboard",
+    template: "%s | Agar Smart Accounting",
+  },
+  robots: { index: false, follow: false },
+};
 
 export default async function DashboardLayout({
   children,
