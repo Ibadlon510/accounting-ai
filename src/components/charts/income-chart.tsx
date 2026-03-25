@@ -26,9 +26,10 @@ interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{ value: number; dataKey: string }>;
   label?: string;
+  currency?: string;
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, label, currency = "AED" }: CustomTooltipProps) {
   if (active && payload && payload.length) {
     const income = payload.find((p) => p.dataKey === "income");
     return (
@@ -38,7 +39,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
           <span className="text-[13px] font-semibold">Income</span>
         </div>
         <p className="mt-1 text-[20px] font-bold">
-          AED {((income?.value ?? 0) / 1000).toFixed(0)}K
+          {currency} {((income?.value ?? 0) / 1000).toFixed(0)}K
         </p>
         <p className="text-[11px] text-white/60">This week</p>
       </div>
@@ -49,9 +50,10 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 interface IncomeChartProps {
   data?: Array<{ month: string; income: number; expenses: number }>;
+  currency?: string;
 }
 
-export function IncomeChart({ data }: IncomeChartProps) {
+export function IncomeChart({ data, currency = "AED" }: IncomeChartProps) {
   const chartData = data && data.length > 0 ? data : emptyData;
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -81,7 +83,7 @@ export function IncomeChart({ data }: IncomeChartProps) {
           dx={-4}
           domain={["auto", "auto"]}
         />
-        <Tooltip content={<CustomTooltip />} cursor={false} />
+        <Tooltip content={<CustomTooltip currency={currency} />} cursor={false} />
         <Bar dataKey="income" radius={[3, 3, 0, 0]} maxBarSize={18}>
           {chartData.map((entry, index) => (
             <Cell

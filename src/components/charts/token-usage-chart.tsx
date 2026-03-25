@@ -27,7 +27,7 @@ export function TokenUsageChart({ data }: TokenUsageChartProps) {
         {chartData.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-text-meta">No token usage yet</div>
         ) : (
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={140}>
           <BarChart data={chartData} barSize={8}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
             <XAxis dataKey="day" tick={false} axisLine={false} tickLine={false} />

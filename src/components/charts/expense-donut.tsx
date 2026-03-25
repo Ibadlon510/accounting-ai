@@ -8,15 +8,17 @@ const emptyData = [
 
 interface ExpenseDonutProps {
   data?: Array<{ name: string; value: number; color: string }>;
+  currency?: string;
 }
 
-export function ExpenseDonut({ data }: ExpenseDonutProps) {
+export function ExpenseDonut({ data, currency = "AED" }: ExpenseDonutProps) {
   const chartData = data && data.length > 0 ? data : emptyData;
   const total = chartData.reduce((s, d) => s + d.value, 0);
   return (
     <div className="flex items-center gap-6">
       <div className="h-[160px] w-[160px] shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        {/* Use explicit height to avoid negative sizing issues in some container layouts */}
+        <ResponsiveContainer width="100%" height={160}>
           <PieChart>
             <Pie
               data={chartData}
@@ -33,7 +35,7 @@ export function ExpenseDonut({ data }: ExpenseDonutProps) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(value) => [`AED ${Number(value).toLocaleString()}`, ""]}
+              formatter={(value) => [`${currency} ${Number(value).toLocaleString()}`, ""]}
               contentStyle={{
                 background: "white",
                 border: "1px solid var(--border-subtle)",

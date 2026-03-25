@@ -10,6 +10,7 @@ import { ExpenseDonut } from "@/components/charts/expense-donut";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { Sparkles } from "lucide-react";
 import { formatNumber } from "@/lib/accounting/engine";
+import { useOrgConfig } from "@/hooks/use-organization";
 import {
   FileText,
   ShoppingCart,
@@ -48,12 +49,16 @@ const emptyStats: DashboardStats = {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>(emptyStats);
   const [loading, setLoading] = useState(true);
+  const orgConfig = useOrgConfig();
+  const currentYear = new Date().getFullYear();
+  const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
+  const ccy = orgConfig.currency;
 
   useEffect(() => {
     fetch("/api/dashboard/stats", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : emptyStats))
       .then((data) => setStats(data))
-      .catch(() => {})
+      .catch((e) => console.error("[dashboard] Failed to load stats:", e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -85,7 +90,7 @@ export default function DashboardPage() {
               <TrendingUp className="h-4 w-4 text-success" />
             </div>
             <p className="mt-3 text-[12px] font-medium text-text-meta">Total Revenue</p>
-            <p className="mt-0.5 text-[24px] font-bold text-text-primary">AED {formatNumber(sales.totalRevenue)}</p>
+            <p className="mt-0.5 text-[24px] font-bold text-text-primary">{ccy} {formatNumber(sales.totalRevenue)}</p>
             <p className="mt-1 text-[12px] text-success">{sales.invoiceCount} invoices • {sales.customerCount} customers</p>
           </div>
         </Link>
@@ -99,7 +104,7 @@ export default function DashboardPage() {
               <TrendingDown className="h-4 w-4 text-error" />
             </div>
             <p className="mt-3 text-[12px] font-medium text-text-meta">Total Expenses</p>
-            <p className="mt-0.5 text-[24px] font-bold text-text-primary">AED {formatNumber(purchases.totalExpenses)}</p>
+            <p className="mt-0.5 text-[24px] font-bold text-text-primary">{ccy} {formatNumber(purchases.totalExpenses)}</p>
             <p className="mt-1 text-[12px] text-error">{purchases.billCount} bills • {purchases.supplierCount} suppliers</p>
           </div>
         </Link>
@@ -113,7 +118,7 @@ export default function DashboardPage() {
               {banking.unreconciled > 0 && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-yellow/20 text-[10px] font-bold text-amber-700">{banking.unreconciled}</span>}
             </div>
             <p className="mt-3 text-[12px] font-medium text-text-meta">Bank Balance</p>
-            <p className="mt-0.5 text-[24px] font-bold text-text-primary">AED {formatNumber(banking.totalBalance)}</p>
+            <p className="mt-0.5 text-[24px] font-bold text-text-primary">{ccy} {formatNumber(banking.totalBalance)}</p>
             <p className="mt-1 text-[12px] text-text-secondary">{banking.unreconciled} unreconciled transactions</p>
           </div>
         </Link>
@@ -126,8 +131,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="mt-3 text-[12px] font-medium text-text-meta">Net VAT Payable</p>
-            <p className="mt-0.5 text-[24px] font-bold text-text-primary">AED {formatNumber(vat.netPayable)}</p>
-            <p className="mt-1 text-[12px] text-text-secondary">Q1 2026 • Due Apr 28</p>
+            <p className="mt-0.5 text-[24px] font-bold text-text-primary">{ccy} {formatNumber(vat.netPayable)}</p>
+            <p className="mt-1 text-[12px] text-text-secondary">{currentQuarter} {currentYear}</p>
           </div>
         </Link>
       </div>
@@ -140,7 +145,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-[15px] font-semibold text-text-primary">Income vs Expenses</h3>
-                <p className="text-[12px] text-text-meta">Monthly trend for 2026</p>
+                <p className="text-[12px] text-text-meta">Monthly trend for {currentYear}</p>
               </div>
               <div className="flex items-center gap-4 text-[12px]">
                 <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#EF4444]" />Revenue</div>
@@ -148,7 +153,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#0F172A]" />Expenses</div>
               </div>
             </div>
-            <IncomeChart data={stats.charts?.incomeChartData} />
+            <IncomeChart data={stats.charts?.incomeChartData} currency={ccy} />
             <div className="mt-4 flex items-center gap-6 border-t border-border-subtle pt-4">
               <div>
                 <p className="text-[11px] text-text-meta">Gross Margin</p>
@@ -156,11 +161,11 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-[11px] text-text-meta">Net Income</p>
-                <p className={`text-[20px] font-bold ${netIncome >= 0 ? "text-success" : "text-error"}`}>AED {formatNumber(netIncome)}</p>
+                <p className={`text-[20px] font-bold ${netIncome >= 0 ? "text-success" : "text-error"}`}>{ccy} {formatNumber(netIncome)}</p>
               </div>
               <div>
                 <p className="text-[11px] text-text-meta">Outstanding Receivables</p>
-                <p className="text-[20px] font-bold text-accent-yellow">AED {formatNumber(sales.totalOutstanding)}</p>
+                <p className="text-[20px] font-bold text-accent-yellow">{ccy} {formatNumber(sales.totalOutstanding)}</p>
               </div>
             </div>
           </div>
@@ -175,7 +180,7 @@ export default function DashboardPage() {
                 <AlertTriangle className="h-4 w-4 text-error" />
                 <p className="text-[13px] font-semibold text-error">Overdue Invoices</p>
               </div>
-              <p className="text-[24px] font-bold text-error">AED {formatNumber(sales.overdueAmount)}</p>
+              <p className="text-[24px] font-bold text-error">{ccy} {formatNumber(sales.overdueAmount)}</p>
               <Link href="/sales/invoices" className="mt-2 flex items-center gap-1 text-[12px] font-medium text-error hover:underline">
                 View overdue <ArrowRight className="h-3 w-3" />
               </Link>
@@ -185,7 +190,7 @@ export default function DashboardPage() {
           {/* Payables */}
           <div className="dashboard-card">
             <p className="text-[12px] font-medium text-text-meta">Accounts Payable</p>
-            <p className="mt-1 text-[22px] font-bold text-text-primary">AED {formatNumber(purchases.totalOutstanding)}</p>
+            <p className="mt-1 text-[22px] font-bold text-text-primary">{ccy} {formatNumber(purchases.totalOutstanding)}</p>
             <Link href="/purchases/bills" className="mt-2 flex items-center gap-1 text-[12px] font-medium text-text-secondary hover:text-text-primary">
               View bills <ArrowRight className="h-3 w-3" />
             </Link>
@@ -200,7 +205,7 @@ export default function DashboardPage() {
                   <span className="rounded-full bg-error-light px-2 py-0.5 text-[10px] font-medium text-error">{inventory.lowStock} low stock</span>
                 )}
               </div>
-              <p className="mt-1 text-[22px] font-bold text-text-primary">AED {formatNumber(inventory.totalValue)}</p>
+              <p className="mt-1 text-[22px] font-bold text-text-primary">{ccy} {formatNumber(inventory.totalValue)}</p>
               <p className="mt-1 text-[12px] text-text-secondary">{inventory.totalProducts} products tracked</p>
             </div>
           </Link>
@@ -233,7 +238,7 @@ export default function DashboardPage() {
                 <p className="text-[12px] text-text-meta">By GL category</p>
               </div>
             </div>
-            <ExpenseDonut data={stats.charts?.expenseDonutData} />
+            <ExpenseDonut data={stats.charts?.expenseDonutData} currency={ccy} />
           </div>
         </div>
       </div>
@@ -249,21 +254,21 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h3 className="text-[14px] font-semibold text-text-primary">VAT Liability Estimator</h3>
-                <p className="text-[11px] text-text-meta">Q1 2026 projection</p>
+                <p className="text-[11px] text-text-meta">{currentQuarter} {currentYear} projection</p>
               </div>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] text-text-secondary">Output VAT (5% on sales)</span>
-                <span className="font-mono text-[13px] font-medium text-text-primary">AED {formatNumber(vat.totalOutputVat)}</span>
+                <span className="text-[12px] text-text-secondary">Output {orgConfig.taxLabel} (estimated on sales)</span>
+                <span className="font-mono text-[13px] font-medium text-text-primary">{ccy} {formatNumber(vat.totalOutputVat)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-text-secondary">Input VAT (recoverable)</span>
-                <span className="font-mono text-[13px] font-medium text-success">- AED {formatNumber(vat.totalInputVat)}</span>
+                <span className="font-mono text-[13px] font-medium text-success">- {ccy} {formatNumber(vat.totalInputVat)}</span>
               </div>
               <div className="border-t border-border-subtle pt-2 flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-text-primary">Estimated Net Payable</span>
-                <span className="font-mono text-[18px] font-bold text-purple-600">AED {formatNumber(vat.netPayable)}</span>
+                <span className="font-mono text-[18px] font-bold text-purple-600">{ccy} {formatNumber(vat.netPayable)}</span>
               </div>
               <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-ai)]/5 px-2.5 py-1.5">
                 <Sparkles className="h-3 w-3 text-[var(--accent-ai)]" />

@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
+import { useOrgConfig } from "@/hooks/use-organization";
 import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
 
 type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure: string; costPrice: number; quantityOnHand: number; isActive: boolean; totalValue: number };
 
 export default function InventoryValuationPage() {
   const [allItems, setAllItems] = useState<Item[]>([]);
+  const orgConfig = useOrgConfig();
+  const ccy = orgConfig.currency;
 
   useEffect(() => {
     fetch("/api/inventory", { cache: "no-store" })
@@ -26,12 +29,12 @@ export default function InventoryValuationPage() {
         <ExportPdfButton documentType="inventory_valuation" />
       </div>
 
-      <p className="mb-6 text-[13px] text-text-secondary">As of February 28, 2026 • Costing method: Weighted Average</p>
+      <p className="mb-6 text-[13px] text-text-secondary">As of {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} • Costing method: Weighted Average</p>
 
       <div className="grid grid-cols-12 gap-6 mb-8">
         <div className="col-span-4 dashboard-card">
           <p className="text-[13px] text-text-secondary">Total Inventory Value</p>
-          <p className="mt-1 text-[28px] font-bold text-text-primary">AED {formatNumber(totalValue)}</p>
+          <p className="mt-1 text-[28px] font-bold text-text-primary">{ccy} {formatNumber(totalValue)}</p>
         </div>
         <div className="col-span-4 dashboard-card">
           <p className="text-[13px] text-text-secondary">Total Units on Hand</p>
@@ -62,8 +65,8 @@ export default function InventoryValuationPage() {
               <div className="col-span-3 font-medium text-text-primary">{item.name}</div>
               <div className="col-span-1 text-right font-mono text-text-primary">{item.quantityOnHand}</div>
               <div className="col-span-1 text-text-secondary">{item.unitOfMeasure}</div>
-              <div className="col-span-2 text-right font-mono text-text-secondary">AED {formatNumber(item.costPrice)}</div>
-              <div className="col-span-2 text-right font-mono font-medium text-text-primary">AED {formatNumber(item.totalValue)}</div>
+              <div className="col-span-2 text-right font-mono text-text-secondary">{ccy} {formatNumber(item.costPrice)}</div>
+              <div className="col-span-2 text-right font-mono font-medium text-text-primary">{ccy} {formatNumber(item.totalValue)}</div>
               <div className="col-span-2 text-right font-mono text-text-secondary">
                 {totalValue > 0 ? `${((item.totalValue / totalValue) * 100).toFixed(1)}%` : "0%"}
               </div>
@@ -74,7 +77,7 @@ export default function InventoryValuationPage() {
           <div className="col-span-4 text-text-primary">Total</div>
           <div className="col-span-1 text-right font-mono text-text-primary">{totalUnits}</div>
           <div className="col-span-3"></div>
-          <div className="col-span-2 text-right font-mono text-text-primary">AED {formatNumber(totalValue)}</div>
+          <div className="col-span-2 text-right font-mono text-text-primary">{ccy} {formatNumber(totalValue)}</div>
           <div className="col-span-2 text-right font-mono text-text-primary">100%</div>
         </div>
       </div>

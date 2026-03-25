@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateJournalEntryPanel } from "@/components/modals/create-journal-entry-panel";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
+import { useOrgConfig } from "@/hooks/use-organization";
 import type { JournalEntry } from "@/types/accounting";
 
 const statusColors: Record<string, string> = {
@@ -26,12 +27,27 @@ export default function JournalEntriesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const orgConfig = useOrgConfig();
 
   const loadEntries = useCallback(() => {
     fetch("/api/accounting/journal-entries", { cache: "no-store" })
-      .then((r) => r.ok ? r.json() : { entries: [] })
+      .then(async (r) => {
+        if (r.ok) return r.json();
+
+        let msg = `HTTP ${r.status}`;
+        try {
+          const j = await r.json();
+          msg = j?.error ?? msg;
+        } catch {
+          // ignore
+        }
+
+        const { showError } = await import("@/lib/utils/toast-helpers");
+        showError("Failed to load journal entries", msg);
+        return { entries: [] as JournalEntry[] };
+      })
       .then((d) => setEntries(d.entries ?? []))
-      .catch(() => {});
+      .catch((e) => console.error("[journal-entries] Failed to load:", e));
   }, []);
 
   useEffect(() => {
@@ -130,7 +146,7 @@ export default function JournalEntriesPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-[14px] font-semibold text-text-primary">
-                    AED {formatNumber(entry.totalDebit)}
+                    {orgConfig.currency} {formatNumber(entry.totalDebit)}
                   </p>
                   <p className="text-[11px] text-text-meta">
                     {formatDate(entry.entryDate)}
