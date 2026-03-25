@@ -1,4 +1,4 @@
-CREATE TABLE "bank_statement_lines" (
+CREATE TABLE IF NOT EXISTS "bank_statement_lines" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"bank_statement_id" uuid NOT NULL,
 	"transaction_date" date NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE "bank_statement_lines" (
 	"line_order" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "bank_statements" (
+CREATE TABLE IF NOT EXISTS "bank_statements" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"bank_account_id" uuid NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE "bank_statements" (
 	"is_demo" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "credit_note_lines" (
+CREATE TABLE IF NOT EXISTS "credit_note_lines" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"credit_note_id" uuid NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE "credit_note_lines" (
 	"line_order" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "credit_notes" (
+CREATE TABLE IF NOT EXISTS "credit_notes" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"credit_note_number" varchar(30) NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE "credit_notes" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "email_templates" (
+CREATE TABLE IF NOT EXISTS "email_templates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE "email_templates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "expense_lines" (
+CREATE TABLE IF NOT EXISTS "expense_lines" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"expense_id" uuid NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE "expense_lines" (
 	"line_order" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "expenses" (
+CREATE TABLE IF NOT EXISTS "expenses" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"expense_number" varchar(30) NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE "expenses" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "notifications" (
+CREATE TABLE IF NOT EXISTS "notifications" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"user_id" uuid,
@@ -119,7 +119,7 @@ CREATE TABLE "notifications" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "pdf_templates" (
+CREATE TABLE IF NOT EXISTS "pdf_templates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -139,7 +139,7 @@ CREATE TABLE "pdf_templates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "sent_emails" (
+CREATE TABLE IF NOT EXISTS "sent_emails" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"sent_by" uuid,
@@ -164,7 +164,7 @@ CREATE TABLE "sent_emails" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "team_invites" (
+CREATE TABLE IF NOT EXISTS "team_invites" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
 	"email" varchar(255) NOT NULL,
@@ -179,65 +179,155 @@ CREATE TABLE "team_invites" (
 --> statement-breakpoint
 ALTER TABLE "organizations" ALTER COLUMN "subscription_plan" SET DEFAULT 'FREE';--> statement-breakpoint
 ALTER TABLE "organizations" ALTER COLUMN "token_balance" SET DEFAULT 0;--> statement-breakpoint
-ALTER TABLE "bank_accounts" ADD COLUMN "account_type" varchar(20) DEFAULT 'bank' NOT NULL;--> statement-breakpoint
-ALTER TABLE "bank_accounts" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "bank_transactions" ADD COLUMN "transfer_reference" varchar(50);--> statement-breakpoint
-ALTER TABLE "bank_transactions" ADD COLUMN "payment_id" uuid;--> statement-breakpoint
-ALTER TABLE "bank_transactions" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "bills" ADD COLUMN "document_id" uuid;--> statement-breakpoint
-ALTER TABLE "bills" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "customers" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "document_transactions" ADD COLUMN "supplier_id" uuid;--> statement-breakpoint
-ALTER TABLE "inventory_movements" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "invoices" ADD COLUMN "document_id" uuid;--> statement-breakpoint
-ALTER TABLE "invoices" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "items" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "journal_entries" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "free_ai_docs_used" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "free_ai_statements_used" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "max_users" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "stripe_customer_id" varchar(255);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "stripe_subscription_id" varchar(255);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "stripe_price_id" varchar(255);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "subscription_status" varchar(20) DEFAULT 'active' NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "current_period_end" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "extra_seats" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "email_from_name" varchar(255);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "email_reply_to" varchar(255);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "email_signature_html" text;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "email_default_cc" varchar(500);--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "auto_send_on_invoice_confirm" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "organizations" ADD COLUMN "auto_send_on_payment_receipt" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "payments" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "suppliers" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "vat_returns" ADD COLUMN "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_bank_statement_id_bank_statements_id_fk" FOREIGN KEY ("bank_statement_id") REFERENCES "public"."bank_statements"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_matched_bank_transaction_id_bank_transactions_id_fk" FOREIGN KEY ("matched_bank_transaction_id") REFERENCES "public"."bank_transactions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bank_statements" ADD CONSTRAINT "bank_statements_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bank_statements" ADD CONSTRAINT "bank_statements_bank_account_id_bank_accounts_id_fk" FOREIGN KEY ("bank_account_id") REFERENCES "public"."bank_accounts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_note_lines" ADD CONSTRAINT "credit_note_lines_credit_note_id_credit_notes_id_fk" FOREIGN KEY ("credit_note_id") REFERENCES "public"."credit_notes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_note_lines" ADD CONSTRAINT "credit_note_lines_account_id_chart_of_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."chart_of_accounts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "public"."invoices"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_bill_id_bills_id_fk" FOREIGN KEY ("bill_id") REFERENCES "public"."bills"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expense_lines" ADD CONSTRAINT "expense_lines_expense_id_expenses_id_fk" FOREIGN KEY ("expense_id") REFERENCES "public"."expenses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expense_lines" ADD CONSTRAINT "expense_lines_gl_account_id_chart_of_accounts_id_fk" FOREIGN KEY ("gl_account_id") REFERENCES "public"."chart_of_accounts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_bank_account_id_bank_accounts_id_fk" FOREIGN KEY ("bank_account_id") REFERENCES "public"."bank_accounts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "pdf_templates" ADD CONSTRAINT "pdf_templates_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sent_emails" ADD CONSTRAINT "sent_emails_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sent_emails" ADD CONSTRAINT "sent_emails_sent_by_users_id_fk" FOREIGN KEY ("sent_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "team_invites" ADD CONSTRAINT "team_invites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "team_invites" ADD CONSTRAINT "team_invites_invited_by_users_id_fk" FOREIGN KEY ("invited_by") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bank_transactions" ADD CONSTRAINT "bank_transactions_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bills" ADD CONSTRAINT "bills_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "document_transactions" ADD CONSTRAINT "document_transactions_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bank_accounts" ADD COLUMN IF NOT EXISTS "account_type" varchar(20) DEFAULT 'bank' NOT NULL;--> statement-breakpoint
+ALTER TABLE "bank_accounts" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "bank_transactions" ADD COLUMN IF NOT EXISTS "transfer_reference" varchar(50);--> statement-breakpoint
+ALTER TABLE "bank_transactions" ADD COLUMN IF NOT EXISTS "payment_id" uuid;--> statement-breakpoint
+ALTER TABLE "bank_transactions" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "bills" ADD COLUMN IF NOT EXISTS "document_id" uuid;--> statement-breakpoint
+ALTER TABLE "bills" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "document_transactions" ADD COLUMN IF NOT EXISTS "supplier_id" uuid;--> statement-breakpoint
+ALTER TABLE "inventory_movements" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "document_id" uuid;--> statement-breakpoint
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal_entries" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "free_ai_docs_used" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "free_ai_statements_used" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "max_users" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "stripe_customer_id" varchar(255);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "stripe_subscription_id" varchar(255);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "stripe_price_id" varchar(255);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "subscription_status" varchar(20) DEFAULT 'active' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "current_period_end" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "extra_seats" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "email_from_name" varchar(255);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "email_reply_to" varchar(255);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "email_signature_html" text;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "email_default_cc" varchar(500);--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "auto_send_on_invoice_confirm" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "auto_send_on_payment_receipt" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "vat_returns" ADD COLUMN IF NOT EXISTS "is_demo" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_bank_statement_id_bank_statements_id_fk" FOREIGN KEY ("bank_statement_id") REFERENCES "public"."bank_statements"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_matched_bank_transaction_id_bank_transactions_id_fk" FOREIGN KEY ("matched_bank_transaction_id") REFERENCES "public"."bank_transactions"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bank_statements" ADD CONSTRAINT "bank_statements_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bank_statements" ADD CONSTRAINT "bank_statements_bank_account_id_bank_accounts_id_fk" FOREIGN KEY ("bank_account_id") REFERENCES "public"."bank_accounts"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_note_lines" ADD CONSTRAINT "credit_note_lines_credit_note_id_credit_notes_id_fk" FOREIGN KEY ("credit_note_id") REFERENCES "public"."credit_notes"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_note_lines" ADD CONSTRAINT "credit_note_lines_account_id_chart_of_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."chart_of_accounts"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "public"."invoices"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_bill_id_bills_id_fk" FOREIGN KEY ("bill_id") REFERENCES "public"."bills"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "credit_notes" ADD CONSTRAINT "credit_notes_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expense_lines" ADD CONSTRAINT "expense_lines_expense_id_expenses_id_fk" FOREIGN KEY ("expense_id") REFERENCES "public"."expenses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expense_lines" ADD CONSTRAINT "expense_lines_gl_account_id_chart_of_accounts_id_fk" FOREIGN KEY ("gl_account_id") REFERENCES "public"."chart_of_accounts"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expenses" ADD CONSTRAINT "expenses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expenses" ADD CONSTRAINT "expenses_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expenses" ADD CONSTRAINT "expenses_bank_account_id_bank_accounts_id_fk" FOREIGN KEY ("bank_account_id") REFERENCES "public"."bank_accounts"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "expenses" ADD CONSTRAINT "expenses_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "pdf_templates" ADD CONSTRAINT "pdf_templates_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "sent_emails" ADD CONSTRAINT "sent_emails_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "sent_emails" ADD CONSTRAINT "sent_emails_sent_by_users_id_fk" FOREIGN KEY ("sent_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "team_invites" ADD CONSTRAINT "team_invites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "team_invites" ADD CONSTRAINT "team_invites_invited_by_users_id_fk" FOREIGN KEY ("invited_by") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bank_transactions" ADD CONSTRAINT "bank_transactions_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "bills" ADD CONSTRAINT "bills_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ALTER TABLE "document_transactions" ADD CONSTRAINT "document_transactions_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "public"."suppliers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

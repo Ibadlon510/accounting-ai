@@ -1,1 +1,1 @@
-ALTER TABLE "users" ADD COLUMN "notification_preferences" jsonb;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notification_preferences" jsonb;
