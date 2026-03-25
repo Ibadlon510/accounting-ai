@@ -3,7 +3,14 @@
 import { useState, useRef } from "react";
 import { HelpCircle, LayoutGrid, SendHorizonal, Paperclip } from "lucide-react";
 import { AiAvatar } from "./ai-avatar";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -21,6 +28,19 @@ export type FileUploadState = {
   error?: string;
 };
 
+const AI_HELP_TIPS = [
+  "Type a question to get AI-powered accounting insights",
+  "Upload a receipt or invoice for automatic data extraction",
+  "Try: 'What's my revenue this month?'",
+];
+
+const AI_COMMANDS = [
+  "Suggest GL account",
+  "Generate report",
+  "Analyze spending",
+  "Find duplicates",
+];
+
 interface AIInputBarProps {
   onSubmit?: (query: string) => void;
   onFileStateChange?: (state: FileUploadState | null) => void;
@@ -28,6 +48,8 @@ interface AIInputBarProps {
 
 export function AIInputBar({ onSubmit, onFileStateChange }: AIInputBarProps) {
   const [value, setValue] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [commandsOpen, setCommandsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSubmit(e: React.FormEvent) {
@@ -117,12 +139,50 @@ export function AIInputBar({ onSubmit, onFileStateChange }: AIInputBarProps) {
         >
           <Paperclip className="h-4 w-4" strokeWidth={1.8} />
         </button>
-        <button type="button" onClick={() => comingSoon("AI Help")} className="flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:text-white/70">
-          <HelpCircle className="h-4 w-4" strokeWidth={1.8} />
-        </button>
-        <button type="button" onClick={() => comingSoon("AI Commands")} className="flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:text-white/70">
-          <LayoutGrid className="h-4 w-4" strokeWidth={1.8} />
-        </button>
+        <DropdownMenu open={helpOpen} onOpenChange={setHelpOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-expanded={helpOpen}
+              aria-label="AI help"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:text-white/70 data-[state=open]:text-white/80"
+            >
+              <HelpCircle className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={8} className="w-72 rounded-xl text-[13px]">
+            <DropdownMenuLabel className="text-text-secondary">Tips</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="flex flex-col gap-2 px-2 py-1.5 text-text-primary">
+              {AI_HELP_TIPS.map((tip) => (
+                <p key={tip} className="leading-snug text-[12px] text-text-secondary">
+                  {tip}
+                </p>
+              ))}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu open={commandsOpen} onOpenChange={setCommandsOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-expanded={commandsOpen}
+              aria-label="AI commands"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:text-white/70 data-[state=open]:text-white/80"
+            >
+              <LayoutGrid className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-xl text-[13px]">
+            <DropdownMenuLabel className="text-text-secondary">Commands</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {AI_COMMANDS.map((cmd) => (
+              <DropdownMenuItem key={cmd} className="cursor-default text-[12px] focus:bg-black/5">
+                {cmd}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </form>
   );

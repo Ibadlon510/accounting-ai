@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Search, Plus, Mail, Phone, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddSupplierPanel } from "@/components/modals/add-supplier-modal";
 import { ViewSupplierPanel } from "@/components/overlays/view-supplier-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 
 type Supplier = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 
@@ -16,9 +17,13 @@ export default function SuppliersPage() {
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
-  useEffect(() => {
+  const loadSuppliers = useCallback(() => {
     fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { suppliers: [] }).then((d) => setSuppliers(d.suppliers ?? [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadSuppliers();
+  }, [loadSuppliers]);
 
   const filtered = suppliers.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase())
@@ -42,6 +47,7 @@ export default function SuppliersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search suppliers..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
+        <ImportExportButtons entity="suppliers" entityLabel="Suppliers" onImportComplete={loadSuppliers} />
         <Button onClick={() => setAddOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> Add Supplier
         </Button>

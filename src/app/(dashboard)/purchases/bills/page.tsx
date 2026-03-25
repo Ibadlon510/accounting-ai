@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateBillPanel } from "@/components/modals/create-bill-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import { ViewBillPanel } from "@/components/overlays/view-bill-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordBillPaymentPanel } from "@/components/modals/record-bill-payment-panel";
@@ -38,13 +39,19 @@ export default function BillsPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function loadBills() {
-    fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch(() => {});
+    fetch("/api/purchases/bills", { cache: "no-store" }).then((r) => r.ok ? r.json() : { bills: [] }).then((d) => setBills(d.bills ?? [])).catch((err) => {
+      console.error("[bills] fetch error:", err);
+    });
   }
 
   useEffect(() => {
     loadBills();
-    fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { suppliers: [] }).then((d) => setSuppliers(d.suppliers ?? [])).catch(() => {});
-    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch(() => {});
+    fetch("/api/purchases/suppliers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { suppliers: [] }).then((d) => setSuppliers(d.suppliers ?? [])).catch((err) => {
+      console.error("[bills] suppliers fetch error:", err);
+    });
+    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch((err) => {
+      console.error("[bills] bank accounts fetch error:", err);
+    });
   }, []);
 
   async function handleCreate(data: { supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; lines: BillLine[]; subtotal: number; taxAmount: number; total: number }) {
@@ -83,10 +90,17 @@ export default function BillsPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search bills..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
+        <ImportExportButtons entity="bills" entityLabel="Bills" onImportComplete={loadBills} />
         <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> New Bill
         </Button>
-        <CreateBillPanel open={createOpen} onOpenChange={setCreateOpen} suppliers={suppliers} onCreate={handleCreate} />
+        <CreateBillPanel
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          suppliers={suppliers}
+          onSupplierCreated={(supplier) => setSuppliers((prev) => [...prev, { id: supplier.id, name: supplier.name, email: "", phone: "", isActive: true }])}
+          onCreate={handleCreate}
+        />
         <ViewBillPanel
           open={!!viewingId}
           onOpenChange={(o) => !o && setViewingId(null)}
@@ -181,8 +195,8 @@ export default function BillsPage() {
           >
             <div className="col-span-2 font-mono font-medium text-text-primary">{bill.billNumber}</div>
             <div className="col-span-3 text-text-primary">{bill.supplierName}</div>
-            <div className="col-span-1 text-text-secondary">{bill.issueDate}</div>
-            <div className="col-span-1 text-text-secondary">{bill.dueDate}</div>
+            <div className="col-span-1 text-text-secondary">{formatDate(bill.issueDate)}</div>
+            <div className="col-span-1 text-text-secondary">{formatDate(bill.dueDate)}</div>
             <div className="col-span-1">
               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusColors[bill.status]}`}>{bill.status}</span>
             </div>

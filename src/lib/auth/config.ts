@@ -33,7 +33,7 @@ const MAGIC_LINK_IDENTIFIER_PREFIX = "magic-link:";
  * OAuth user creation is handled in the signIn callback.
  */
 export const authConfig: NextAuthConfig = {
-  debug: true, // Temporary — shows detailed auth errors in server console
+  debug: process.env.NODE_ENV === "development",
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { bills, billLines, suppliers, paymentAllocations, payments, documents, documentTransactions } from "@/lib/db/schema";
+import { bills, billLines, suppliers, paymentAllocations, payments, documents, documentTransactions, organizations, taxCodes } from "@/lib/db/schema";
 import { eq, sql, and } from "drizzle-orm";
 import { deriveBillStatus } from "@/lib/accounting/document-status";
+import { requireOrgRole } from "@/lib/auth/require-role";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -15,6 +16,7 @@ export async function GET() {
         id: bills.id,
         supplierId: bills.supplierId,
         supplierName: suppliers.name,
+        supplierEmail: suppliers.email,
         billNumber: bills.billNumber,
         issueDate: bills.issueDate,
         dueDate: bills.dueDate,
@@ -25,6 +27,9 @@ export async function GET() {
         total: bills.total,
         amountPaid: bills.amountPaid,
         amountDue: bills.amountDue,
+        notes: bills.notes,
+        terms: bills.terms,
+        paymentInfo: bills.paymentInfo,
         documentId: bills.documentId,
       })
       .from(bills)
@@ -125,18 +130,21 @@ export async function GET() {
 
     return NextResponse.json({ bills: result });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Failed to load bills";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[purchases/bills GET] Error:", e);
+    return NextResponse.json({ error: "Failed to load bills" }, { status: 500 });
   }
 }
 
-type LineInput = { id?: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate?: number; taxAmount?: number };
+type LineInput = { id?: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate?: number; taxAmount?: number; taxCodeId?: string; taxCode?: string };
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { supplierId: string; billNumber: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number };
+  const roleCheck = await requireOrgRole(orgId, "accountant");
+  if (roleCheck instanceof NextResponse) return roleCheck;
+
+  let body: { supplierId: string; billNumber: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string };
   try {
     body = await request.json();
   } catch {
@@ -152,6 +160,18 @@ export async function POST(request: Request) {
   if (totalNum <= 0) return NextResponse.json({ error: "Total must be greater than zero" }, { status: 400 });
 
   try {
+    const [org] = await db
+      .select({ isVatRegistered: organizations.isVatRegistered, defaultTaxCodeId: organizations.defaultTaxCodeId })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    let defaultTaxCode = "SR";
+    if (org?.defaultTaxCodeId) {
+      const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, org.defaultTaxCodeId)).limit(1);
+      if (tc) defaultTaxCode = tc.code;
+    }
+
     const [bill] = await db
       .insert(bills)
       .values({
@@ -162,10 +182,13 @@ export async function POST(request: Request) {
         dueDate,
         status: "draft",
         subtotal: String(Number(subtotal) || 0),
-        taxAmount: String(Number(taxAmount) || 0),
+        taxAmount: String(org?.isVatRegistered ? (Number(taxAmount) || 0) : 0),
         total: String(totalNum),
         amountPaid: "0",
         amountDue: String(totalNum),
+        notes: body.notes?.trim() || null,
+        terms: body.terms?.trim() || null,
+        paymentInfo: body.paymentInfo?.trim() || null,
       })
       .returning({ id: bills.id, billNumber: bills.billNumber, supplierId: bills.supplierId, issueDate: bills.issueDate, dueDate: bills.dueDate, status: bills.status, subtotal: bills.subtotal, taxAmount: bills.taxAmount, total: bills.total, amountPaid: bills.amountPaid, amountDue: bills.amountDue });
 
@@ -176,8 +199,16 @@ export async function POST(request: Request) {
       const qty = Number(l.quantity) || 0;
       const price = Number(l.unitPrice) || 0;
       const amt = Number(l.amount) || (qty * price);
-      const rate = isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate);
-      const taxAmt = isNaN(Number(l.taxAmount)) ? Math.round(amt * rate / 100 * 100) / 100 : Number(l.taxAmount);
+      const rate = org?.isVatRegistered ? (isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate)) : 0;
+      const taxAmt = org?.isVatRegistered ? (isNaN(Number(l.taxAmount)) ? Math.round(amt * rate / 100 * 100) / 100 : Number(l.taxAmount)) : 0;
+
+      let lineTaxCode = l.taxCode || defaultTaxCode;
+      let lineTaxCodeId = l.taxCodeId || null;
+      if (lineTaxCodeId) {
+        const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, lineTaxCodeId)).limit(1);
+        if (tc) lineTaxCode = tc.code;
+      }
+
       await db.insert(billLines).values({
         billId: bill.id,
         itemId: l.productId || null,
@@ -185,7 +216,8 @@ export async function POST(request: Request) {
         quantity: String(qty),
         unitPrice: String(price),
         amount: String(amt),
-        taxCode: "VAT5",
+        taxCode: lineTaxCode,
+        taxCodeId: lineTaxCodeId,
         taxRate: String(rate),
         taxAmount: String(taxAmt),
         lineOrder: i,
@@ -213,13 +245,13 @@ export async function POST(request: Request) {
           quantity: Number(l.quantity) || 0,
           unitPrice: Number(l.unitPrice) || 0,
           amount: Number(l.amount) || 0,
-          taxRate: isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate),
+          taxRate: isNaN(Number(l.taxRate)) ? 0 : Number(l.taxRate),
           taxAmount: Number(l.taxAmount) || 0,
         })),
       },
     });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Failed to create bill";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[purchases/bills POST] Error:", e);
+    return NextResponse.json({ error: "Failed to create bill" }, { status: 500 });
   }
 }

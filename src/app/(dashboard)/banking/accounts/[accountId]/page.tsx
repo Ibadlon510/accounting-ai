@@ -2,12 +2,12 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import {
   ArrowDownLeft, ArrowUpRight, Sparkles, Loader2, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { comingSoon, showSuccess, showError } from "@/lib/utils/toast-helpers";
+import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 
 type BankAccount = { id: string; accountName: string; bankName: string; accountNumber: string; iban: string; currency: string; currentBalance: number; isActive: boolean };
 type BankTransaction = { id: string; bankAccountId: string; transactionDate: string; description: string; amount: number; type: "debit" | "credit"; reference: string; category: string | null; isReconciled: boolean; suggestedAccount?: string; confidence?: number };
@@ -28,6 +28,7 @@ export default function BankAccountTransactionsPage() {
   const [suggestions, setSuggestions] = useState<Record<string, Suggestion>>({});
   const [suggestingId, setSuggestingId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [matchingId, setMatchingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -128,6 +129,28 @@ export default function BankAccountTransactionsPage() {
     [suggestions]
   );
 
+  const matchTransaction = useCallback(async (txn: BankTransaction) => {
+    setMatchingId(txn.id);
+    try {
+      const res = await fetch("/api/banking/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId: txn.id }),
+      });
+      if (res.ok) {
+        setTransactions((prev) => prev.map((t) => t.id === txn.id ? { ...t, isReconciled: true } : t));
+        showSuccess("Matched", `Transaction "${txn.description.slice(0, 40)}" marked as reconciled.`);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError(data?.error ?? "Failed to reconcile");
+      }
+    } catch {
+      showError("Failed to reconcile transaction");
+    } finally {
+      setMatchingId(null);
+    }
+  }, []);
+
   const suggestAllUnreconciled = useCallback(() => {
     const unreconTxns = transactions.filter((t) => !t.isReconciled);
     unreconTxns.forEach((txn) => fetchSuggestion(txn));
@@ -221,7 +244,7 @@ export default function BankAccountTransactionsPage() {
                 key={txn.id}
                 className="grid grid-cols-12 gap-3 border-b border-border-subtle/50 px-6 py-3 text-[13px] transition-colors hover:bg-black/[0.01] items-center"
               >
-                <div className="col-span-1 text-text-secondary">{txn.transactionDate.slice(5)}</div>
+                <div className="col-span-1 text-text-secondary">{formatDate(txn.transactionDate)}</div>
                 <div className="col-span-4 flex items-center gap-2">
                   {txn.type === "credit" ? (
                     <ArrowDownLeft className="h-3.5 w-3.5 text-success" />
@@ -285,10 +308,11 @@ export default function BankAccountTransactionsPage() {
                         </Button>
                       )}
                       <button
-                        onClick={() => comingSoon("Bank Reconciliation")}
-                        className="rounded-full bg-text-primary/5 px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-text-primary/10"
+                        onClick={() => matchTransaction(txn)}
+                        disabled={!!matchingId}
+                        className="rounded-full bg-text-primary/5 px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-text-primary/10 disabled:opacity-50"
                       >
-                        Match
+                        {matchingId === txn.id ? <Loader2 className="inline h-3 w-3 animate-spin" /> : "Match"}
                       </button>
                     </>
                   )}

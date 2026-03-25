@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Search, Plus, Mail, Phone, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
 import { ViewCustomerPanel } from "@/components/overlays/view-customer-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 
 type Customer = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; creditLimit: number; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 
@@ -16,9 +17,13 @@ export default function CustomersPage() {
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
 
-  useEffect(() => {
+  const loadCustomers = useCallback(() => {
     fetch("/api/sales/customers", { cache: "no-store" }).then((r) => r.ok ? r.json() : { customers: [] }).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
 
   const filtered = customers.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,6 +50,7 @@ export default function CustomersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
+        <ImportExportButtons entity="customers" entityLabel="Customers" onImportComplete={loadCustomers} />
         <Button onClick={() => setAddOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> Add Customer
         </Button>

@@ -10,7 +10,7 @@ export async function GET() {
 
   try {
     const custRows = await db
-      .select({ id: customers.id, name: customers.name, city: customers.city, country: customers.country })
+      .select({ id: customers.id, name: customers.name, email: customers.email, city: customers.city, country: customers.country })
       .from(customers)
       .where(and(eq(customers.organizationId, orgId), eq(customers.isActive, true)))
       .orderBy(customers.name);
@@ -70,6 +70,7 @@ export async function GET() {
         customer: {
           id: customer.id,
           name: customer.name,
+          email: customer.email ?? null,
           city: customer.city ?? "",
           country: customer.country ?? "",
         },

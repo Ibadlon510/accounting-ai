@@ -20,6 +20,10 @@ services:
         value: "20"
       - key: HOSTNAME
         value: "0.0.0.0"
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: "/usr/bin/chromium-browser"
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: accounting-ai-db

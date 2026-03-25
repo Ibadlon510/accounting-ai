@@ -6,6 +6,7 @@ import { refillTokens, addTopUpTokens } from "@/lib/billing/token-refill";
 import { PLANS, STRIPE_PRICES } from "@/lib/billing/plans";
 import type Stripe from "stripe";
 import { createNotification } from "@/lib/notifications/create";
+import { sendSubscriptionConfirmedEmail, sendSubscriptionCanceledEmail } from "@/lib/email/subscription";
 
 // Disable Next.js body parsing — Stripe needs the raw body for signature verification
 export const runtime = "nodejs";
@@ -88,6 +89,15 @@ export async function POST(request: NextRequest) {
             actionUrl: "/settings",
             actionLabel: "View Plan",
           }).catch(() => {});
+
+          if (session.customer_email) {
+            const [orgInfo] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+            sendSubscriptionConfirmedEmail({
+              to: session.customer_email,
+              planName: "Pro",
+              orgName: orgInfo?.name ?? "Your Organization",
+            }).catch((err) => console.error("[billing] confirm email failed:", err));
+          }
         }
         break;
       }
@@ -183,6 +193,16 @@ export async function POST(request: NextRequest) {
           actionUrl: "/settings",
           actionLabel: "Resubscribe",
         }).catch(() => {});
+
+        {
+          const [orgInfo] = await db.select({ name: organizations.name, email: organizations.email }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+          if (orgInfo?.email) {
+            sendSubscriptionCanceledEmail({
+              to: orgInfo.email,
+              orgName: orgInfo.name,
+            }).catch((err) => console.error("[billing] cancel email failed:", err));
+          }
+        }
         break;
       }
 

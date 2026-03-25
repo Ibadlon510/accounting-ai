@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Input } from "@/components/ui/input";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
 
 type Row = { label: string; amount: number; isHeader?: boolean; isTotal?: boolean; indent?: number };
 
@@ -50,10 +48,7 @@ export default function ProfitAndLossPage() {
     { label: "Total Expenses", amount: pnl.totalExpenses, isTotal: true },
   ];
 
-  const formatDisplayDate = (d: string) => {
-    if (!d) return "";
-    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  };
+  const formatDisplayDate = (d: string) => formatDate(d);
 
   return (
     <>
@@ -64,9 +59,7 @@ export default function ProfitAndLossPage() {
           <label className="text-[12px] font-medium text-text-meta">To</label>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-40 rounded-xl border-border-subtle text-[13px]" />
         </div>
-        <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
-          <Download className="h-3.5 w-3.5" /> Export PDF
-        </Button>
+        <ExportPdfButton documentType="profit_and_loss" params={{ from, to }} />
       </div>
 
       <p className="mb-6 text-[13px] text-text-secondary">

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -12,10 +13,11 @@ import {
   EntityPanelField,
   EntityPanelFooter,
 } from "@/components/overlays/entity-panel";
-import { formatNumber } from "@/lib/accounting/engine";
-import { User, DollarSign, FileText, CreditCard } from "lucide-react";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
+import { User, DollarSign, FileText, CreditCard, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
+import { SendDocumentModal } from "@/components/email/send-document-modal";
 
 interface StatementEntry {
   date: string;
@@ -26,7 +28,7 @@ interface StatementEntry {
 }
 
 export interface Statement {
-  customer: { id: string; name: string; city: string; country: string };
+  customer: { id: string; name: string; email?: string | null; city: string; country: string };
   invoices: Array<{ id: string; issueDate: string; invoiceNumber: string; total: number }>;
   creditNotes: Array<{ id: string; issueDate: string; creditNoteNumber: string; total: number }>;
   payments: Array<{ id: string; paymentDate: string; paymentNumber: string; amount: number }>;
@@ -45,6 +47,7 @@ interface ViewStatementPanelProps {
 }
 
 export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatementPanelProps) {
+  const [showEmailModal, setShowEmailModal] = React.useState(false);
   if (!statement) return null;
 
   const entries: StatementEntry[] = [
@@ -80,7 +83,7 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
 
   return (
     <EntityPanel open={open} onOpenChange={onOpenChange}>
-      <EntityPanelContent size="lg">
+      <EntityPanelContent size="lg" panelTitle="Customer Statement">
         <EntityPanelBody>
           <EntityPanelMain>
             <EntityPanelHeader title="Customer Statement" showAiButton={false} />
@@ -133,13 +136,22 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-text-meta">
                   Transaction History
                 </p>
-                <Button
-                  onClick={() => comingSoon("Export Statement PDF")}
-                  variant="outline"
-                  className="h-8 gap-1.5 rounded-lg border-border-subtle text-[12px]"
-                >
-                  Export PDF
-                </Button>
+                <div className="flex gap-2">
+                  <ExportPdfButton
+                    documentType="statement"
+                    data={{ statement }}
+                    label="Export PDF"
+                    className="h-8 gap-1.5 rounded-lg border-border-subtle text-[12px]"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowEmailModal(true)}
+                    className="h-8 gap-1.5 rounded-lg border-border-subtle text-[12px]"
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Email Statement
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-border-subtle overflow-hidden">
@@ -161,7 +173,7 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
                         key={i}
                         className="grid grid-cols-12 gap-3 border-t border-border-subtle/50 px-4 py-2.5 text-[13px]"
                       >
-                        <div className="col-span-2 text-text-secondary">{entry.date}</div>
+                        <div className="col-span-2 text-text-secondary">{formatDate(entry.date)}</div>
                         <div className="col-span-1">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -200,6 +212,15 @@ export function ViewStatementPanel({ open, onOpenChange, statement }: ViewStatem
 
         <EntityPanelFooter onCancel={() => onOpenChange(false)} cancelLabel="Close" />
       </EntityPanelContent>
+
+      <SendDocumentModal
+        open={showEmailModal}
+        onOpenChange={setShowEmailModal}
+        documentType="statement"
+        recipientEmail={statement.customer.email ?? undefined}
+        recipientName={statement.customer.name}
+        data={{ statement }}
+      />
     </EntityPanel>
   );
 }

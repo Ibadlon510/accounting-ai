@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddItemPanel } from "@/components/modals/add-item-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import { DashboardPill } from "@/components/dashboard/dashboard-pill";
 import { InventoryDashboard } from "@/components/dashboard/variants/inventory-dashboard";
 import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferences";
@@ -55,12 +56,16 @@ export default function InventoryPage() {
     queryFn: () => fetchJson<InventoryMiniStats>("/api/inventory/mini-stats"),
   });
 
-  useEffect(() => {
+  const loadItems = useCallback(() => {
     fetch("/api/inventory", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { items: [] })
       .then((d) => setItems((d.items ?? []).map((i: Item) => ({ ...i, totalValue: i.quantityOnHand * i.costPrice }))))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
 
   const stats = {
     totalItems: items.length,
@@ -259,6 +264,7 @@ export default function InventoryPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
+        <ImportExportButtons entity="items" entityLabel="Items" onImportComplete={loadItems} />
         <Button onClick={() => setAddOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> Add Item
         </Button>

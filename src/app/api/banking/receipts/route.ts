@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+import { getSessionUserId } from "@/lib/auth/helpers";
 import { db } from "@/lib/db";
 import {
   bankTransactions,
@@ -13,10 +14,13 @@ import {
   bills,
   customers,
   suppliers,
+  organizations,
+  contactCredits,
 } from "@/lib/db/schema";
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { createOwnerDepositReceipt } from "@/lib/banking/services";
+import { sendDocumentEmail } from "@/lib/email/document-email";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -120,6 +124,7 @@ type ReceiptBody = {
   customerId?: string;
   allocations?: ({ invoiceId: string; amount: number } | { billId: string; amount: number })[];
   supplierId?: string;
+  unappliedAmount?: number;
 };
 
 export async function POST(request: Request) {
@@ -151,15 +156,18 @@ export async function POST(request: Request) {
       }
 
       if (receiptType === "customer_payment") {
-      const { customerId, allocations } = body;
+      const { customerId, allocations, unappliedAmount: rawUnapplied } = body;
+      const unapplied = rawUnapplied ?? 0;
       const invoiceAllocs = allocations?.filter((a): a is { invoiceId: string; amount: number } => "invoiceId" in a && !!a.invoiceId) ?? [];
-      if (!customerId || !invoiceAllocs.length) throw new Error("customer_payment requires customerId and allocations");
+      if (!customerId || (!invoiceAllocs.length && unapplied <= 0)) throw new Error("customer_payment requires customerId and allocations (or unappliedAmount)");
       const allocSum = invoiceAllocs.reduce((s, a) => s + (a.amount ?? 0), 0);
-      if (Math.abs(allocSum - amount) > 0.01) throw new Error("Sum of allocations must equal amount");
+      if (Math.abs(allocSum + unapplied - amount) > 0.01) throw new Error("Sum of allocations + unappliedAmount must equal amount");
 
       for (const a of invoiceAllocs) {
-        const [inv] = await tx.select({ status: invoices.status }).from(invoices).where(and(eq(invoices.id, a.invoiceId), eq(invoices.organizationId, orgId))).limit(1);
+        const [inv] = await tx.select({ status: invoices.status, amountDue: invoices.amountDue }).from(invoices).where(and(eq(invoices.id, a.invoiceId), eq(invoices.organizationId, orgId))).limit(1);
         if (inv?.status === "draft") throw new Error("Cannot record receipt against draft invoice. Confirm the invoice first.");
+        const invDue = parseFloat(inv?.amountDue ?? "0");
+        if (a.amount > invDue + 0.01) throw new Error(`Allocation (${a.amount}) exceeds invoice amount due (${invDue})`);
       }
 
       const [arAccount] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
@@ -196,11 +204,13 @@ export async function POST(request: Request) {
           documentId: a.invoiceId,
           amount: String(a.amount),
         });
-        const [inv] = await tx.select({ amountPaid: invoices.amountPaid, total: invoices.total }).from(invoices).where(and(eq(invoices.id, a.invoiceId), eq(invoices.organizationId, orgId))).limit(1);
+        const [inv] = await tx.select({ amountPaid: invoices.amountPaid, total: invoices.total, creditApplied: invoices.creditApplied }).from(invoices).where(and(eq(invoices.id, a.invoiceId), eq(invoices.organizationId, orgId))).limit(1);
         if (inv) {
           const paid = parseFloat(inv.amountPaid ?? "0") + a.amount;
           const total = parseFloat(inv.total ?? "0");
-          await tx.update(invoices).set({ amountPaid: String(paid), amountDue: String(Math.max(0, total - paid)) }).where(eq(invoices.id, a.invoiceId));
+          const credited = parseFloat(inv.creditApplied ?? "0");
+          const due = Math.max(0, total - paid - credited);
+          await tx.update(invoices).set({ amountPaid: String(paid), amountDue: String(due), status: due <= 0.01 ? "paid" : "partial" }).where(eq(invoices.id, a.invoiceId));
         }
       }
 
@@ -219,6 +229,22 @@ export async function POST(request: Request) {
         })
         .returning();
 
+      if (unapplied > 0) {
+        await tx.insert(contactCredits).values({
+          organizationId: orgId,
+          contactType: "customer",
+          contactId: customerId,
+          sourceType: "overpayment",
+          sourceId: payment.id,
+          originalAmount: String(unapplied),
+          remainingAmount: String(unapplied),
+          currency: "AED",
+          description: `Overpayment on receipt ${paymentNumber}`,
+          creditDate: date,
+        });
+      }
+
+      const allocatedPortion = allocSum;
       const periodId = await resolveOrCreatePeriod(orgId, date, tx);
       if (periodId) {
         const [entryCountRow] = await tx.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
@@ -244,10 +270,20 @@ export async function POST(request: Request) {
           .returning();
 
         if (je) {
-          await tx.insert(journalLines).values([
+          const lines: (typeof journalLines.$inferInsert)[] = [
             { journalEntryId: je.id, organizationId: orgId, accountId: cashAccountId!, description: "Payment received", debit: String(amount), credit: "0", currency: "AED", baseCurrencyDebit: String(amount), baseCurrencyCredit: "0", lineOrder: 1 },
-            { journalEntryId: je.id, organizationId: orgId, accountId: arAccount.id, description: "AR — payment received", debit: "0", credit: String(amount), currency: "AED", baseCurrencyDebit: "0", baseCurrencyCredit: String(amount), lineOrder: 2 },
-          ]);
+          ];
+          if (allocatedPortion > 0) {
+            lines.push({ journalEntryId: je.id, organizationId: orgId, accountId: arAccount.id, description: "AR — payment received", debit: "0", credit: String(allocatedPortion), currency: "AED", baseCurrencyDebit: "0", baseCurrencyCredit: String(allocatedPortion), lineOrder: 2 });
+          }
+          if (unapplied > 0) {
+            const [depositAcct] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2300"))).limit(1);
+            if (!depositAcct) {
+              throw new Error("Customer Deposits account (2300) not found. Please add it to your Chart of Accounts.");
+            }
+            lines.push({ journalEntryId: je.id, organizationId: orgId, accountId: depositAcct.id, description: "Customer deposit — unapplied", debit: "0", credit: String(unapplied), currency: "AED", baseCurrencyDebit: "0", baseCurrencyCredit: String(unapplied), lineOrder: lines.length + 1 });
+          }
+          await tx.insert(journalLines).values(lines);
           await tx.update(payments).set({ journalEntryId: je.id }).where(eq(payments.id, payment.id));
         }
       }
@@ -437,6 +473,46 @@ export async function POST(request: Request) {
 
     throw new Error("Invalid receiptType");
     });
+
+    // Auto-send payment receipt email if org setting enabled
+    if (receiptType === "customer_payment" && result.ok && body.customerId) {
+      try {
+        const [org] = await db
+          .select({ autoSend: organizations.autoSendOnPaymentReceipt })
+          .from(organizations)
+          .where(eq(organizations.id, orgId))
+          .limit(1);
+        if (org?.autoSend) {
+          const [cust] = await db
+            .select({ name: customers.name, email: customers.email })
+            .from(customers)
+            .where(and(eq(customers.id, body.customerId), eq(customers.organizationId, orgId)))
+            .limit(1);
+          if (cust?.email) {
+            const senderId = (await getSessionUserId()) ?? "system";
+            sendDocumentEmail({
+              documentType: "payment_receipt",
+              documentId: result.paymentId,
+              recipientEmail: cust.email,
+              recipientName: cust.name,
+              senderId,
+              orgId,
+              data: {
+                payment: {
+                  amount: String(amount),
+                  date,
+                  reference,
+                },
+                customer: { name: cust.name, email: cust.email },
+              },
+            }).catch((err) => console.error("[auto-send-receipt] email failed:", err));
+          }
+        }
+      } catch (err) {
+        console.error("[auto-send-receipt] error:", err);
+      }
+    }
+
     return NextResponse.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Failed to create receipt";

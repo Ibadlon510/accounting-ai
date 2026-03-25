@@ -41,7 +41,7 @@ export function ProductSelect({
           (i: Product & { isActive?: boolean }) => (i.type === "product" || i.type === "service") && i.isActive !== false
         );
         setProducts(
-          items.map((i: Product & { unitOfMeasure?: string }) => ({
+          items.map((i: Product & { unitOfMeasure?: string; isActive?: boolean }) => ({
             id: i.id,
             name: i.name,
             sku: i.sku ?? "",
@@ -49,6 +49,8 @@ export function ProductSelect({
             salesPrice: i.salesPrice ?? 0,
             purchasePrice: i.purchasePrice ?? 0,
             unitOfMeasure: i.unitOfMeasure ?? "pcs",
+            salesAccountId: i.salesAccountId ?? null,
+            purchaseAccountId: i.purchaseAccountId ?? null,
           }))
         );
       })

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
-import { Download, CheckCircle2, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
 
 type ReportRow = { label: string; amount: number; isHeader?: boolean; isTotal?: boolean; indent?: number };
 
@@ -61,10 +60,7 @@ export default function BalanceSheetPage() {
   const totalLiabilitiesEquity = bs.totalLiabilities + bs.totalEquity + bs.retainedEarnings;
   const isBalanced = Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01;
 
-  const formatDisplayDate = (d: string) => {
-    if (!d) return "";
-    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  };
+  const formatDisplayDate = (d: string) => formatDate(d);
 
   const assets: ReportRow[] = [
     { label: "Assets", amount: 0, isHeader: true },
@@ -90,9 +86,7 @@ export default function BalanceSheetPage() {
           <label className="text-[12px] font-medium text-text-meta">As of</label>
           <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="h-9 w-40 rounded-xl border-border-subtle text-[13px]" />
         </div>
-        <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
-          <Download className="h-3.5 w-3.5" /> Export PDF
-        </Button>
+        <ExportPdfButton documentType="balance_sheet" params={{ asOf }} />
       </div>
 
       <p className="mb-4 text-[13px] text-text-secondary">As of {formatDisplayDate(asOf)}</p>

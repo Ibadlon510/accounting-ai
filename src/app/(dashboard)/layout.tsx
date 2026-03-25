@@ -5,6 +5,7 @@ import { TopNav } from "@/components/layout/top-nav";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
 import { LoginUpsell } from "@/components/overlays/login-upsell";
+import { FormattingInitializer } from "@/components/providers/formatting-provider";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 
 export default async function DashboardLayout({
@@ -26,6 +27,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="bg-canvas-gradient relative min-h-screen">
+      <FormattingInitializer />
       <TopNav />
       <Suspense fallback={null}>
         <EmailVerificationBanner />

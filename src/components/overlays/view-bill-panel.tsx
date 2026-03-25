@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -14,11 +15,14 @@ import {
 } from "@/components/overlays/entity-panel";
 import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
 import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
-import { formatNumber } from "@/lib/accounting/engine";
-import { FileText, Calendar, Building2, DollarSign, Receipt, CreditCard, Send } from "lucide-react";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
+import { FileText, Calendar, Building2, DollarSign, CreditCard, Send, Mail } from "lucide-react";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
+import { SendDocumentModal } from "@/components/email/send-document-modal";
 type BillLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Bill = { id: string; supplierId: string; supplierName: string; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: BillLine[] };
+type Bill = { id: string; supplierId: string; supplierName: string; supplierEmail?: string | null; billNumber: string; issueDate: string; dueDate: string; status: "draft" | "received" | "paid" | "partial" | "overdue" | "cancelled"; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; notes?: string | null; terms?: string | null; paymentInfo?: string | null; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: BillLine[] };
 import { Button } from "@/components/ui/button";
+import { useOrgConfig } from "@/hooks/use-organization";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -40,11 +44,13 @@ interface ViewBillPanelProps {
 }
 
 export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onViewPaymentReceipt, onConfirm, confirming }: ViewBillPanelProps) {
+  const [showEmailModal, setShowEmailModal] = React.useState(false);
+  const { currency, taxLabel } = useOrgConfig();
   if (!bill) return null;
 
   return (
     <EntityPanel open={open} onOpenChange={onOpenChange}>
-      <EntityPanelContent size="lg">
+      <EntityPanelContent size="lg" panelTitle={`Bill ${bill.billNumber}`}>
         <EntityPanelBody>
           <EntityPanelMain>
             <EntityPanelHeader title={`Bill ${bill.billNumber}`} showAiButton={false} />
@@ -65,12 +71,12 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
                 <EntityPanelField
                   icon={<Calendar className="h-4 w-4" />}
                   label="Issue Date"
-                  value={bill.issueDate}
+                  value={formatDate(bill.issueDate)}
                 />
                 <EntityPanelField
                   icon={<Calendar className="h-4 w-4" />}
                   label="Due Date"
-                  value={bill.dueDate}
+                  value={formatDate(bill.dueDate)}
                 />
               </EntityPanelFieldRow>
               <EntityPanelField icon={<FileText className="h-4 w-4" />} label="Status">
@@ -84,29 +90,29 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Subtotal"
-                  value={`AED ${formatNumber(bill.subtotal)}`}
+                  value={`${currency} ${formatNumber(bill.subtotal)}`}
                 />
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
-                  label="VAT"
-                  value={`AED ${formatNumber(bill.taxAmount)}`}
+                  label={taxLabel}
+                  value={`${currency} ${formatNumber(bill.taxAmount)}`}
                 />
               </EntityPanelFieldRow>
               <EntityPanelFieldRow>
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Total"
-                  value={`AED ${formatNumber(bill.total)}`}
+                  value={`${currency} ${formatNumber(bill.total)}`}
                 />
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Amount Paid"
-                  value={`AED ${formatNumber(bill.amountPaid)}`}
+                  value={`${currency} ${formatNumber(bill.amountPaid)}`}
                 />
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Balance Due"
-                  value={`AED ${formatNumber(bill.amountDue)}`}
+                  value={`${currency} ${formatNumber(bill.amountDue)}`}
                 />
               </EntityPanelFieldRow>
               {(bill.status === "paid" || bill.amountPaid > 0) && (
@@ -129,7 +135,7 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
                   <div className="col-span-5">Description</div>
                   <div className="col-span-2 text-right">Qty</div>
                   <div className="col-span-2 text-right">Unit Price</div>
-                  <div className="col-span-1 text-right">VAT %</div>
+                  <div className="col-span-1 text-right">{taxLabel} %</div>
                   <div className="col-span-2 text-right">Amount</div>
                 </div>
                 {bill.lines.map((line) => (
@@ -154,6 +160,21 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
         </EntityPanelBody>
 
         <EntityPanelFooter onCancel={() => onOpenChange(false)} cancelLabel="Close">
+          <ExportPdfButton
+            documentType="bill"
+            documentId={bill.id}
+            data={{ bill }}
+            size="sm"
+            className="gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowEmailModal(true)}
+            className="mr-auto gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+          >
+            <Mail className="h-3.5 w-3.5" /> Email
+          </Button>
           {bill.status === "draft" && onConfirm && (
             <Button
               size="sm"
@@ -175,6 +196,17 @@ export function ViewBillPanel({ open, onOpenChange, bill, onRecordPayment, onVie
           )}
         </EntityPanelFooter>
       </EntityPanelContent>
+
+      <SendDocumentModal
+        open={showEmailModal}
+        onOpenChange={setShowEmailModal}
+        documentType="bill"
+        documentId={bill.id}
+        documentNumber={bill.billNumber}
+        recipientEmail={bill.supplierEmail ?? undefined}
+        recipientName={bill.supplierName}
+        data={{ bill }}
+      />
     </EntityPanel>
   );
 }

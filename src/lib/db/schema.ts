@@ -10,6 +10,7 @@ import {
   numeric,
   date,
   check,
+  index,
   uniqueIndex,
   primaryKey,
 } from "drizzle-orm/pg-core";
@@ -41,6 +42,17 @@ export const organizations = pgTable("organizations", {
   subscriptionStatus: varchar("subscription_status", { length: 20 }).notNull().default("active"),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   extraSeats: integer("extra_seats").notNull().default(0),
+  emailFromName: varchar("email_from_name", { length: 255 }),
+  emailReplyTo: varchar("email_reply_to", { length: 255 }),
+  emailSignatureHtml: text("email_signature_html"),
+  emailDefaultCc: varchar("email_default_cc", { length: 500 }),
+  autoSendOnInvoiceConfirm: boolean("auto_send_on_invoice_confirm").notNull().default(false),
+  autoSendOnPaymentReceipt: boolean("auto_send_on_payment_receipt").notNull().default(false),
+  isVatRegistered: boolean("is_vat_registered").notNull().default(false),
+  taxLabel: varchar("tax_label", { length: 30 }).notNull().default("VAT"),
+  defaultTaxCodeId: uuid("default_tax_code_id"), // FK to tax_codes enforced at app level (circular ref)
+  numberFormat: varchar("number_format", { length: 20 }).notNull().default("1,234.56"),
+  dateFormat: varchar("date_format", { length: 20 }).notNull().default("DD/MM/YYYY"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -59,6 +71,7 @@ export const users = pgTable("users", {
   image: text("image"),
   roleTitle: varchar("role_title", { length: 100 }),
   avatarUrl: text("avatar_url"),
+  notificationPreferences: jsonb("notification_preferences"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -146,7 +159,9 @@ export const chartOfAccounts = pgTable("chart_of_accounts", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("chart_of_accounts_org_code_idx").on(t.organizationId, t.code),
+]);
 
 // ─── Fiscal Years ───────────────────────────────────────────
 export const fiscalYears = pgTable("fiscal_years", {
@@ -211,7 +226,10 @@ export const journalEntries = pgTable("journal_entries", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [
+  index("journal_entries_org_date_idx").on(t.organizationId, t.entryDate),
+  uniqueIndex("journal_entries_org_number_idx").on(t.organizationId, t.entryNumber),
+]);
 
 // ─── Journal Lines ──────────────────────────────────────────
 // Immutable debit/credit lines. Append-only.
@@ -239,7 +257,10 @@ export const journalLines = pgTable("journal_lines", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [
+  index("journal_lines_entry_idx").on(t.journalEntryId),
+  index("journal_lines_org_account_idx").on(t.organizationId, t.accountId),
+]);
 
 // ─── Currencies ─────────────────────────────────────────────
 export const currencies = pgTable("currencies", {
@@ -329,14 +350,20 @@ export const invoices = pgTable("invoices", {
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 18, scale: 2 }).notNull().default("0"),
   amountPaid: numeric("amount_paid", { precision: 18, scale: 2 }).notNull().default("0"),
+  creditApplied: numeric("credit_applied", { precision: 18, scale: 2 }).notNull().default("0"),
   amountDue: numeric("amount_due", { precision: 18, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  terms: text("terms"),
+  paymentInfo: text("payment_info"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("invoices_org_status_idx").on(t.organizationId, t.status),
+  index("invoices_org_customer_idx").on(t.organizationId, t.customerId),
+]);
 
 // ─── Invoice Lines ──────────────────────────────────────────
 export const invoiceLines = pgTable("invoice_lines", {
@@ -350,7 +377,8 @@ export const invoiceLines = pgTable("invoice_lines", {
   unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
   taxCode: varchar("tax_code", { length: 20 }),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxCodeId: uuid("tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
   accountId: uuid("account_id").references(() => chartOfAccounts.id),
   lineOrder: integer("line_order").notNull().default(0),
@@ -375,14 +403,20 @@ export const bills = pgTable("bills", {
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 18, scale: 2 }).notNull().default("0"),
   amountPaid: numeric("amount_paid", { precision: 18, scale: 2 }).notNull().default("0"),
+  creditApplied: numeric("credit_applied", { precision: 18, scale: 2 }).notNull().default("0"),
   amountDue: numeric("amount_due", { precision: 18, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  terms: text("terms"),
+  paymentInfo: text("payment_info"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("bills_org_status_idx").on(t.organizationId, t.status),
+  index("bills_org_supplier_idx").on(t.organizationId, t.supplierId),
+]);
 
 // ─── Bill Lines ─────────────────────────────────────────────
 export const billLines = pgTable("bill_lines", {
@@ -396,7 +430,8 @@ export const billLines = pgTable("bill_lines", {
   unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
   taxCode: varchar("tax_code", { length: 20 }),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxCodeId: uuid("tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
   accountId: uuid("account_id").references(() => chartOfAccounts.id),
   lineOrder: integer("line_order").notNull().default(0),
@@ -450,7 +485,8 @@ export const items = pgTable("items", {
   salesPrice: numeric("sales_price", { precision: 18, scale: 2 }),
   purchasePrice: numeric("purchase_price", { precision: 18, scale: 2 }),
   costPrice: numeric("cost_price", { precision: 18, scale: 2 }).default("0"),
-  taxCode: varchar("tax_code", { length: 20 }).default("VAT5"),
+  taxCode: varchar("tax_code", { length: 20 }),
+  defaultTaxCodeId: uuid("default_tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
   salesAccountId: uuid("sales_account_id").references(() => chartOfAccounts.id),
   purchaseAccountId: uuid("purchase_account_id").references(() => chartOfAccounts.id),
   inventoryAccountId: uuid("inventory_account_id").references(() => chartOfAccounts.id),
@@ -530,7 +566,9 @@ export const bankTransactions = pgTable("bank_transactions", {
   paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "set null" }),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("bank_txn_org_account_date_idx").on(t.organizationId, t.bankAccountId, t.transactionDate),
+]);
 
 // ─── Bank Statements ────────────────────────────────────────
 export const bankStatements = pgTable("bank_statements", {
@@ -575,7 +613,10 @@ export const taxCodes = pgTable("tax_codes", {
   rate: numeric("rate", { precision: 5, scale: 2 }).notNull(),
   type: varchar("type", { length: 15 }).notNull(), // output, input, exempt, zero, reverse_charge
   isActive: boolean("is_active").notNull().default(true),
-});
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("tax_codes_org_code_idx").on(t.organizationId, t.code),
+]);
 
 // ─── VAT Returns ────────────────────────────────────────────
 export const vatReturns = pgTable("vat_returns", {
@@ -687,8 +728,9 @@ export const documentTransactionLines = pgTable("document_transaction_lines", {
   quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
   unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  taxCodeId: uuid("tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
   glAccountId: uuid("gl_account_id")
     .notNull()
     .references(() => chartOfAccounts.id),
@@ -733,8 +775,9 @@ export const expenseLines = pgTable("expense_lines", {
   quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
   unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  taxCodeId: uuid("tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
   lineOrder: integer("line_order").notNull().default(0),
 });
 
@@ -776,8 +819,9 @@ export const creditNoteLines = pgTable("credit_note_lines", {
   quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull().default("1"),
   unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull().default("0"),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("5"),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default("0"),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).default("0"),
+  taxCodeId: uuid("tax_code_id").references(() => taxCodes.id, { onDelete: "set null" }),
   lineOrder: integer("line_order").notNull().default(0),
 });
 
@@ -836,4 +880,160 @@ export const notifications = pgTable("notifications", {
   actionLabel: varchar("action_label", { length: 50 }), // CTA text
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── PDF Templates ──────────────────────────────────────────
+export const PDF_DOCUMENT_TYPES = [
+  "invoice", "bill", "credit_note", "statement",
+  "profit_and_loss", "balance_sheet", "vat_audit", "inventory_valuation",
+] as const;
+export type PdfDocumentType = (typeof PDF_DOCUMENT_TYPES)[number];
+
+export const pdfTemplates = pgTable("pdf_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  baseTemplateId: varchar("base_template_id", { length: 50 }),
+  htmlBody: text("html_body").notNull(),
+  customCss: text("custom_css"),
+  headerHtml: text("header_html"),
+  footerHtml: text("footer_html"),
+  watermark: varchar("watermark", { length: 100 }),
+  pageSize: varchar("page_size", { length: 10 }).notNull().default("A4"),
+  orientation: varchar("orientation", { length: 10 }).notNull().default("portrait"),
+  marginTop: varchar("margin_top", { length: 10 }).default("15mm"),
+  marginRight: varchar("margin_right", { length: 10 }).default("15mm"),
+  marginBottom: varchar("margin_bottom", { length: 10 }).default("20mm"),
+  marginLeft: varchar("margin_left", { length: 10 }).default("15mm"),
+  accentColor: varchar("accent_color", { length: 7 }).default("#1a1a2e"),
+  fontFamily: varchar("font_family", { length: 100 }).default("Plus Jakarta Sans"),
+  showSections: jsonb("show_sections").$type<{ terms: boolean; notes: boolean; payment: boolean; signature: boolean; qrCode: boolean }>(),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Document Type Defaults (per-doc-type default content) ──
+export const documentTypeDefaults = pgTable("document_type_defaults", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  defaultTerms: text("default_terms"),
+  defaultNotes: text("default_notes"),
+  defaultPaymentInfo: text("default_payment_info"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Document Type PDF Settings (per-doc-type appearance for built-in templates) ──
+export const documentTypePdfSettings = pgTable("document_type_pdf_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  pageSize: varchar("page_size", { length: 10 }).default("A4"),
+  orientation: varchar("orientation", { length: 10 }).default("portrait"),
+  marginTop: varchar("margin_top", { length: 10 }).default("15mm"),
+  marginRight: varchar("margin_right", { length: 10 }).default("15mm"),
+  marginBottom: varchar("margin_bottom", { length: 10 }).default("20mm"),
+  marginLeft: varchar("margin_left", { length: 10 }).default("15mm"),
+  accentColor: varchar("accent_color", { length: 7 }).default("#1a1a2e"),
+  fontFamily: varchar("font_family", { length: 100 }).default("Plus Jakarta Sans"),
+  showSections: jsonb("show_sections").$type<{ terms: boolean; notes: boolean; payment: boolean; signature: boolean; qrCode: boolean }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Email Templates ────────────────────────────────────────
+export const EMAIL_DOCUMENT_TYPES = [
+  "invoice", "bill", "statement", "payment_receipt", "payment_reminder", "overdue_notice",
+] as const;
+export type EmailDocumentType = (typeof EMAIL_DOCUMENT_TYPES)[number];
+
+export const emailTemplates = pgTable("email_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  htmlBody: text("html_body").notNull(),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Sent Emails ────────────────────────────────────────────
+export const sentEmails = pgTable("sent_emails", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  sentBy: uuid("sent_by").references(() => users.id, { onDelete: "set null" }),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  documentId: uuid("document_id"),
+  documentNumber: varchar("document_number", { length: 50 }),
+  recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+  recipientName: varchar("recipient_name", { length: 255 }),
+  ccEmails: text("cc_emails"),
+  bccEmails: text("bcc_emails"),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  htmlBody: text("html_body").notNull(),
+  hasAttachment: boolean("has_attachment").notNull().default(true),
+  attachmentFilename: varchar("attachment_filename", { length: 255 }),
+  resendEmailId: varchar("resend_email_id", { length: 100 }),
+  status: varchar("status", { length: 20 }).notNull().default("sent"),
+  statusUpdatedAt: timestamp("status_updated_at", { withTimezone: true }),
+  errorMessage: text("error_message"),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  emailTemplateId: uuid("email_template_id"),
+  pdfTemplateId: varchar("pdf_template_id", { length: 100 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Contact Credits (overpayments + credit notes) ──────────
+export const contactCredits = pgTable("contact_credits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  contactType: varchar("contact_type", { length: 10 }).notNull(), // "customer" | "supplier"
+  contactId: uuid("contact_id").notNull(),
+  sourceType: varchar("source_type", { length: 20 }).notNull(), // "overpayment" | "credit_note"
+  sourceId: uuid("source_id").notNull(),
+  originalAmount: numeric("original_amount", { precision: 15, scale: 2 }).notNull(),
+  remainingAmount: numeric("remaining_amount", { precision: 15, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  description: varchar("description", { length: 255 }),
+  creditDate: varchar("credit_date", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("contact_credits_org_type_contact_idx").on(t.organizationId, t.contactType, t.contactId),
+]);
+
+// ─── Credit Applications ────────────────────────────────────
+export const creditApplications = pgTable("credit_applications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  creditId: uuid("credit_id")
+    .notNull()
+    .references(() => contactCredits.id, { onDelete: "cascade" }),
+  documentType: varchar("document_type", { length: 10 }).notNull(), // "invoice" | "bill"
+  documentId: uuid("document_id").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  journalEntryId: uuid("journal_entry_id"),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+  appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });

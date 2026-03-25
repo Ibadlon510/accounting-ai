@@ -8,6 +8,7 @@ import {
   chartOfAccounts,
   journalEntries,
   journalLines,
+  organizations,
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
@@ -31,6 +32,12 @@ async function createBillJournalEntry(orgId: string, billId: string) {
 
   if (!bill || bill.journalEntryId) return; // already has JE
 
+  const [org] = await db
+    .select({ isVatRegistered: organizations.isVatRegistered })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
   const [supp] = await db.select({ name: suppliers.name }).from(suppliers).where(eq(suppliers.id, bill.supplierId)).limit(1);
   const supplierName = supp?.name ?? "Supplier";
 
@@ -45,6 +52,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       description: billLines.description,
       amount: billLines.amount,
       taxAmount: billLines.taxAmount,
+      taxCode: billLines.taxCode,
       accountId: billLines.accountId,
     })
     .from(billLines)
@@ -108,7 +116,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         lineOrder: lineOrder++,
       });
     }
-    if (tax > 0 && vatInputAccount) {
+    if (org?.isVatRegistered && tax > 0 && vatInputAccount) {
       jl.push({
         journalEntryId: je.id,
         organizationId: orgId,
@@ -119,7 +127,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         currency: cur,
         baseCurrencyDebit: String(tax),
         baseCurrencyCredit: "0",
-        taxCode: "VAT5",
+        taxCode: l.taxCode || "SR",
         taxAmount: String(tax),
         lineOrder: lineOrder++,
       });

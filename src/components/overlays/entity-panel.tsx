@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { Dialog as DialogPrimitive } from "radix-ui";
+import { Dialog as DialogPrimitive, VisuallyHidden } from "radix-ui";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { X, ChevronLeft, Sparkles } from "lucide-react";
@@ -45,9 +45,13 @@ function EntityPanelContent({
   className,
   children,
   size = "lg",
+  panelTitle,
+  panelDescription,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   size?: "md" | "lg" | "xl";
+  panelTitle?: string;
+  panelDescription?: string;
 }) {
   const sizeClasses = {
     md: "max-w-[680px]",
@@ -59,6 +63,7 @@ function EntityPanelContent({
     <DialogPrimitive.Portal>
       <EntityPanelOverlay />
       <DialogPrimitive.Content
+        aria-describedby={undefined}
         className={cn(
           "fixed inset-y-3 right-3 z-50",
           "flex flex-col w-[calc(100%-4rem)]",
@@ -73,6 +78,10 @@ function EntityPanelContent({
         )}
         {...props}
       >
+        <VisuallyHidden.Root>
+          <DialogPrimitive.Title>{panelTitle ?? "Panel"}</DialogPrimitive.Title>
+          {panelDescription && <DialogPrimitive.Description>{panelDescription}</DialogPrimitive.Description>}
+        </VisuallyHidden.Root>
         {children}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>

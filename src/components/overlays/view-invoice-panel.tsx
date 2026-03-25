@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -14,12 +15,17 @@ import {
 } from "@/components/overlays/entity-panel";
 import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
 import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
-import { formatNumber } from "@/lib/accounting/engine";
-import { FileText, Calendar, User, DollarSign, Receipt, CreditCard, Send } from "lucide-react";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
+import { FileText, Calendar, User, DollarSign, CreditCard, Send, Mail, ReceiptText, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
+import { SendDocumentModal } from "@/components/email/send-document-modal";
+import { ApplyCreditsPanel } from "@/components/modals/apply-credits-panel";
+import { useOrgConfig } from "@/hooks/use-organization";
 
 type InvoiceLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
-type Invoice = { id: string; customerId: string; customerName: string; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
+type AppliedCredit = { id: string; creditNoteNumber: string; date: string; amount: number };
+type Invoice = { id: string; customerId: string; customerName: string; customerEmail?: string | null; invoiceNumber: string; issueDate: string; dueDate: string; status: string; subtotal: number; taxAmount: number; total: number; amountPaid: number; amountDue: number; creditsApplied?: number; appliedCredits?: AppliedCredit[]; notes?: string | null; terms?: string | null; paymentInfo?: string | null; documentId?: string | null; paymentId?: string | null; receipts?: ReceiptItem[]; lines: InvoiceLine[] };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-text-secondary",
@@ -41,11 +47,17 @@ interface ViewInvoicePanelProps {
 }
 
 export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment, onViewPaymentReceipt, onConfirm, confirming }: ViewInvoicePanelProps) {
+  const [showEmailModal, setShowEmailModal] = React.useState(false);
+  const [showCreditsPanel, setShowCreditsPanel] = React.useState(false);
+  const [creditsExpanded, setCreditsExpanded] = React.useState(false);
+  const { currency, taxLabel } = useOrgConfig();
   if (!invoice) return null;
+
+  const totalCreditsApplied = invoice.creditsApplied ?? (invoice.appliedCredits?.reduce((s, c) => s + c.amount, 0) ?? 0);
 
   return (
     <EntityPanel open={open} onOpenChange={onOpenChange}>
-      <EntityPanelContent size="lg">
+      <EntityPanelContent size="lg" panelTitle={`Invoice ${invoice.invoiceNumber}`}>
         <EntityPanelBody>
           <EntityPanelMain>
             <EntityPanelHeader title={`Invoice ${invoice.invoiceNumber}`} showAiButton={false} />
@@ -66,12 +78,12 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
                 <EntityPanelField
                   icon={<Calendar className="h-4 w-4" />}
                   label="Issue Date"
-                  value={invoice.issueDate}
+                  value={formatDate(invoice.issueDate)}
                 />
                 <EntityPanelField
                   icon={<Calendar className="h-4 w-4" />}
                   label="Due Date"
-                  value={invoice.dueDate}
+                  value={formatDate(invoice.dueDate)}
                 />
               </EntityPanelFieldRow>
               <EntityPanelField icon={<FileText className="h-4 w-4" />} label="Status">
@@ -85,31 +97,47 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Subtotal"
-                  value={`AED ${formatNumber(invoice.subtotal)}`}
+                  value={`${currency} ${formatNumber(invoice.subtotal)}`}
                 />
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
-                  label="VAT (5%)"
-                  value={`AED ${formatNumber(invoice.taxAmount)}`}
+                  label={taxLabel}
+                  value={`${currency} ${formatNumber(invoice.taxAmount)}`}
                 />
               </EntityPanelFieldRow>
               <EntityPanelFieldRow>
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
                   label="Total"
-                  value={`AED ${formatNumber(invoice.total)}`}
+                  value={`${currency} ${formatNumber(invoice.total)}`}
                 />
                 <EntityPanelField
                   icon={<DollarSign className="h-4 w-4" />}
-                  label="Amount Paid"
-                  value={`AED ${formatNumber(invoice.amountPaid)}`}
-                />
-                <EntityPanelField
-                  icon={<DollarSign className="h-4 w-4" />}
-                  label="Balance Due"
-                  value={`AED ${formatNumber(invoice.amountDue)}`}
+                  label="Payments Received"
+                  value={`${currency} ${formatNumber(invoice.amountPaid)}`}
                 />
               </EntityPanelFieldRow>
+              {totalCreditsApplied > 0 && (
+                <EntityPanelFieldRow>
+                  <EntityPanelField
+                    icon={<ReceiptText className="h-4 w-4" />}
+                    label="Credits Applied"
+                    value={`- ${currency} ${formatNumber(totalCreditsApplied)}`}
+                  />
+                  <EntityPanelField
+                    icon={<DollarSign className="h-4 w-4" />}
+                    label="Amount Due"
+                    value={`${currency} ${formatNumber(invoice.amountDue)}`}
+                  />
+                </EntityPanelFieldRow>
+              )}
+              {totalCreditsApplied <= 0 && (
+                <EntityPanelField
+                  icon={<DollarSign className="h-4 w-4" />}
+                  label="Amount Due"
+                  value={`${currency} ${formatNumber(invoice.amountDue)}`}
+                />
+              )}
               {(invoice.status === "paid" || invoice.amountPaid > 0) && (
                 <PaymentReceiptSection
                   receipts={invoice.receipts ?? []}
@@ -118,6 +146,33 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
                   amountPaid={invoice.amountPaid}
                   onViewPaymentReceipt={onViewPaymentReceipt}
                 />
+              )}
+              {invoice.appliedCredits && invoice.appliedCredits.length > 0 && (
+                <div className="flex flex-col gap-2 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setCreditsExpanded(!creditsExpanded)}
+                    className="flex w-full items-center gap-3 text-left transition-colors hover:bg-black/[0.02] rounded-lg -m-1 p-1"
+                  >
+                    <ReceiptText className="h-4 w-4 shrink-0 text-text-meta" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-text-meta">Applied Credits</span>
+                    <span className="text-[13px] text-text-secondary">
+                      {invoice.appliedCredits.length} credit{invoice.appliedCredits.length !== 1 ? "s" : ""}
+                    </span>
+                    {creditsExpanded ? <ChevronDown className="ml-auto h-4 w-4 text-text-meta" /> : <ChevronRight className="ml-auto h-4 w-4 text-text-meta" />}
+                  </button>
+                  {creditsExpanded && (
+                    <div className="ml-7 space-y-3 border-l-2 border-border-subtle pl-3">
+                      {invoice.appliedCredits.map((credit) => (
+                        <div key={credit.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                          <span className="font-medium text-text-primary">{credit.creditNoteNumber}</span>
+                          <span className="text-text-secondary">{credit.date ? formatDate(credit.date) : "—"}</span>
+                          <span className="font-mono font-medium text-text-primary">- {currency} {formatNumber(credit.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </EntityPanelFieldGroup>
 
@@ -130,7 +185,7 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
                   <div className="col-span-5">Description</div>
                   <div className="col-span-2 text-right">Qty</div>
                   <div className="col-span-2 text-right">Unit Price</div>
-                  <div className="col-span-1 text-right">VAT %</div>
+                  <div className="col-span-1 text-right">{taxLabel} %</div>
                   <div className="col-span-2 text-right">Amount</div>
                 </div>
                 {invoice.lines.map((line) => (
@@ -158,6 +213,21 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
           onCancel={() => onOpenChange(false)}
           cancelLabel="Close"
         >
+          <ExportPdfButton
+            documentType="invoice"
+            documentId={invoice.id}
+            data={{ invoice }}
+            size="sm"
+            className="gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowEmailModal(true)}
+            className="mr-auto gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+          >
+            <Mail className="h-3.5 w-3.5" /> Email
+          </Button>
           {invoice.status === "draft" && onConfirm && (
             <Button
               size="sm"
@@ -166,6 +236,16 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
               className="mr-auto gap-1.5 rounded-xl bg-text-primary px-5 text-white hover:bg-text-primary/90"
             >
               <Send className="h-3.5 w-3.5" /> {confirming ? "Confirming…" : "Confirm invoice"}
+            </Button>
+          )}
+          {invoice.amountDue > 0 && invoice.status !== "draft" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowCreditsPanel(true)}
+              className="mr-auto gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+            >
+              <ReceiptText className="h-3.5 w-3.5" /> Apply Credit
             </Button>
           )}
           {onRecordPayment && invoice.amountDue > 0 && invoice.status !== "draft" && (
@@ -179,6 +259,34 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
           )}
         </EntityPanelFooter>
       </EntityPanelContent>
+
+      <SendDocumentModal
+        open={showEmailModal}
+        onOpenChange={setShowEmailModal}
+        documentType="invoice"
+        documentId={invoice.id}
+        documentNumber={invoice.invoiceNumber}
+        recipientEmail={invoice.customerEmail ?? undefined}
+        recipientName={invoice.customerName}
+        data={{ invoice }}
+      />
+
+      <ApplyCreditsPanel
+        open={showCreditsPanel}
+        onClose={() => setShowCreditsPanel(false)}
+        documentType="invoice"
+        documentId={invoice.id}
+        documentNumber={invoice.invoiceNumber}
+        amountDue={invoice.amountDue}
+        contactType="customer"
+        contactId={invoice.customerId}
+        contactName={invoice.customerName}
+        currency={currency}
+        onSuccess={() => {
+          setShowCreditsPanel(false);
+          window.location.reload();
+        }}
+      />
     </EntityPanel>
   );
 }

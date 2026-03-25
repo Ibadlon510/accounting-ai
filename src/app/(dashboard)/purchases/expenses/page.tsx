@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -142,7 +142,7 @@ export default function ExpensesPage() {
             className="grid w-full grid-cols-12 gap-4 border-b border-border-subtle/50 px-6 py-3.5 text-left text-[13px] transition-colors hover:bg-black/[0.01]"
           >
             <div className="col-span-2 font-mono font-medium text-text-primary">{exp.expenseNumber}</div>
-            <div className="col-span-2 text-text-secondary">{exp.date}</div>
+            <div className="col-span-2 text-text-secondary">{formatDate(exp.date)}</div>
             <div className="col-span-2 text-text-primary">{exp.supplierName || "—"}</div>
             <div className="col-span-2 text-text-secondary">{exp.bankAccountName || "—"}</div>
             <div className="col-span-2 truncate text-text-secondary">{exp.description || "—"}</div>

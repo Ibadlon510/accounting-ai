@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Plus, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TransferPanel } from "@/components/modals/transfer-panel";
@@ -52,7 +52,7 @@ export default function TransfersPage() {
         ) : (
           transfers.map((t) => (
             <div key={t.id} className="grid grid-cols-12 gap-4 border-b border-border-subtle/50 px-6 py-3.5 text-[13px] transition-colors hover:bg-black/[0.01]">
-              <div className="col-span-1 text-text-secondary">{t.date}</div>
+              <div className="col-span-1 text-text-secondary">{formatDate(t.date)}</div>
               <div className="col-span-3 text-text-primary">{t.fromAccountName}</div>
               <div className="col-span-1 flex items-center justify-center">
                 <ArrowLeftRight className="h-4 w-4 text-text-meta" />

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Plus, ArrowDownLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +87,7 @@ export default function ReceiptsPage() {
         ) : (
           filtered.map((r) => (
             <div key={r.id} className="grid grid-cols-12 gap-4 border-b border-border-subtle/50 px-6 py-3.5 text-[13px] transition-colors hover:bg-black/[0.01]">
-              <div className="col-span-1 text-text-secondary">{r.transactionDate}</div>
+              <div className="col-span-1 text-text-secondary">{formatDate(r.transactionDate)}</div>
               <div className="col-span-2 text-text-primary">{r.accountName}</div>
               <div className="col-span-2 flex items-center gap-1.5">
                 {r.isInterAccountTransfer && (

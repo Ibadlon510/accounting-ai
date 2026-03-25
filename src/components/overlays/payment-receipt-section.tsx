@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { EntityPanelField } from "@/components/overlays/entity-panel";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Receipt, ChevronDown, ChevronRight } from "lucide-react";
 
 export type ReceiptItem = {
@@ -88,7 +88,7 @@ export function PaymentReceiptSection({
 
   const ReceiptRow = ({ r }: { r: ReceiptItem }) => (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-      <span className="text-text-secondary">{r.date || "—"}</span>
+      <span className="text-text-secondary">{r.date ? formatDate(r.date) : "—"}</span>
       <span className="font-mono font-medium text-text-primary">AED {formatNumber(r.amount)}</span>
       <ReceiptLink r={r} />
     </div>
@@ -100,7 +100,7 @@ export function PaymentReceiptSection({
       <EntityPanelField icon={<Receipt className="h-4 w-4" />} label="Payment Receipt">
         <div className="mt-0.5 flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-            <span className="text-text-secondary">{r.date || "—"}</span>
+            <span className="text-text-secondary">{r.date ? formatDate(r.date) : "—"}</span>
             <span className="font-mono font-medium text-text-primary">AED {formatNumber(r.amount)}</span>
           </div>
           <ReceiptLink r={r} />

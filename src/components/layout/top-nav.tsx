@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -20,7 +20,6 @@ import {
   LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { comingSoon } from "@/lib/utils/toast-helpers";
 import { NotificationCenter } from "@/components/notifications/notification-center";
 import {
   Tooltip,
@@ -31,13 +30,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "next-auth/react";
 import { TokenMeter } from "@/components/ui/token-meter";
 
-const navItems = [
+const baseNavItems = [
   { icon: Home, label: "Home", href: "/dashboard" },
   { icon: BookOpen, label: "Accounting", href: "/accounting" },
   { icon: FileText, label: "Sales", href: "/sales" },
@@ -50,21 +50,43 @@ const navItems = [
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
+const LAUNCHER_HREFS = ["/dashboard", "/sales", "/purchases", "/banking", "/reports", "/settings"] as const;
+
 export function TopNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userName = session?.user?.name || "User";
   const userInitials = userName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
   const [userRole, setUserRole] = useState<string>("");
+  const [taxLabel, setTaxLabel] = useState("VAT");
+  const [isVatRegistered, setIsVatRegistered] = useState(true);
 
   useEffect(() => {
     fetch("/api/org/current", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.role) setUserRole(data.role.charAt(0).toUpperCase() + data.role.slice(1));
+        if (data?.taxLabel) setTaxLabel(data.taxLabel);
+        if (typeof data?.isVatRegistered === "boolean") setIsVatRegistered(data.isVatRegistered);
       })
       .catch(() => {});
   }, []);
+
+  const navItems = useMemo(() => {
+    const items = baseNavItems.map((item) =>
+      item.href === "/vat" ? { ...item, label: taxLabel } : item
+    );
+    return isVatRegistered ? items : items.filter((item) => item.href !== "/vat");
+  }, [taxLabel, isVatRegistered]);
+
+  const launcherItems = useMemo(
+    () =>
+      LAUNCHER_HREFS.map((href) => {
+        const item = navItems.find((n) => n.href === href)!;
+        return item ? { ...item, label: href === "/dashboard" ? "Dashboard" : item.label } : null;
+      }).filter(Boolean) as typeof navItems,
+    [navItems]
+  );
 
   async function handleSignOut() {
     await signOut({ callbackUrl: "/login" });
@@ -172,9 +194,34 @@ export function TopNav() {
           <Link href="/settings" className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary">
             <Settings className="h-[18px] w-[18px]" strokeWidth={1.8} />
           </Link>
-          <button onClick={() => comingSoon("App Launcher")} className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary">
-            <Grid3X3 className="h-[18px] w-[18px]" strokeWidth={1.8} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="App launcher"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/5 hover:text-text-primary data-[state=open]:bg-black/5"
+              >
+                <Grid3X3 className="h-[18px] w-[18px]" strokeWidth={1.8} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 rounded-xl">
+              <DropdownMenuLabel className="text-text-secondary text-[11px] font-medium uppercase tracking-wide">
+                Quick links
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {launcherItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <DropdownMenuItem key={item.href} asChild>
+                    <Link href={item.href} className="cursor-pointer gap-2">
+                      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                      {item.label}
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

@@ -4,6 +4,7 @@ import { db, userRoles, users, teamInvites, organizations } from "@/lib/db";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { canAddUser } from "@/lib/billing/gates";
+import { sendTeamInviteEmail } from "@/lib/email/team-invite";
 
 export async function GET(request: NextRequest) {
   try {
@@ -121,10 +122,28 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // TODO: Send invite email (Phase 8)
-
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const inviteUrl = `${siteUrl}/accept-invite?token=${token}`;
+
+    const [org] = await db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const [inviter] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    sendTeamInviteEmail({
+      to: email.toLowerCase(),
+      inviteUrl,
+      orgName: org?.name ?? "Your Organization",
+      inviterName: inviter?.name ?? "A team member",
+      role: inviteRole,
+    }).catch((err) => console.error("[team-invite] email failed:", err));
 
     return NextResponse.json({
       invite: {

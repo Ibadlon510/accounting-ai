@@ -11,6 +11,7 @@ import {
   RefreshCw, X,
 } from "lucide-react";
 import { showError, showSuccess } from "@/lib/utils/toast-helpers";
+import { formatDate } from "@/lib/formatting";
 import { SmartDropZone } from "@/components/workspace/smart-drop-zone";
 import { BatchReport, type BatchResult } from "@/components/ai/batch-report";
 import { DashboardPill } from "@/components/dashboard/dashboard-pill";
@@ -365,7 +366,7 @@ export default function DocumentsPage() {
                 className="min-w-[640px] grid grid-cols-12 gap-4 border-b border-border-subtle/50 px-6 py-3.5 items-center text-[13px]"
               >
                 <div className="col-span-2 text-text-secondary">
-                  {new Date(doc.createdAt).toLocaleDateString()}
+                  {formatDate(doc.createdAt)}
                 </div>
                 <div className="col-span-2">
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${config.className}`}>

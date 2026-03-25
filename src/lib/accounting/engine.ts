@@ -154,28 +154,8 @@ export function computeAccountBalance(
   return Math.round((totalCredit - totalDebit) * 100) / 100;
 }
 
-/**
- * Format currency amount
- */
-export function formatAmount(
-  amount: number,
-  currency: string = "AED",
-  locale: string = "en-AE"
-): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-/**
- * Format number without currency symbol
- */
-export function formatNumber(amount: number): string {
-  return new Intl.NumberFormat("en-AE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+export {
+  formatNumber,
+  formatAmount,
+  formatDate,
+} from "@/lib/formatting";

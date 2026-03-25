@@ -17,6 +17,7 @@ interface GLComboboxProps {
   aiSuggestion?: { accountId: string; confidence: number } | null;
   className?: string;
   required?: boolean;
+  disabled?: boolean;
 }
 
 export function GLCombobox({
@@ -26,6 +27,7 @@ export function GLCombobox({
   aiSuggestion,
   className,
   required,
+  disabled,
 }: GLComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -59,7 +61,9 @@ export function GLCombobox({
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return;
           setOpen(!open);
           if (!open) setTimeout(() => inputRef.current?.focus(), 50);
         }}
@@ -67,7 +71,8 @@ export function GLCombobox({
           "flex h-9 w-full items-center justify-between rounded-xl border border-border-subtle bg-surface px-3 text-left text-[13px] transition-colors",
           "focus:outline-none focus:ring-2 focus:ring-text-primary/20 focus:border-text-primary/30",
           "hover:border-border-subtle/80",
-          !selected && "text-text-meta",
+          disabled && "cursor-not-allowed opacity-50 hover:border-border-subtle",
+          !selected && !disabled && "text-text-meta",
         )}
       >
         <span className="truncate">
@@ -77,7 +82,7 @@ export function GLCombobox({
       </button>
       {required && <input type="text" required value={value} onChange={() => {}} className="sr-only" tabIndex={-1} />}
 
-      {open && (
+      {open && !disabled && (
         <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-xl border border-border-subtle bg-surface shadow-lg">
           {/* Search */}
           <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">

@@ -29,6 +29,11 @@ export async function GET() {
     currency: org.currency,
     subscriptionPlan: org.subscriptionPlan,
     tokenBalance: Number(org.tokenBalance ?? 0),
+    numberFormat: org.numberFormat ?? "1,234.56",
+    dateFormat: org.dateFormat ?? "DD/MM/YYYY",
+    isVatRegistered: org.isVatRegistered ?? false,
+    taxLabel: org.taxLabel ?? "VAT",
+    defaultTaxCodeId: org.defaultTaxCodeId ?? null,
     role,
   });
 }

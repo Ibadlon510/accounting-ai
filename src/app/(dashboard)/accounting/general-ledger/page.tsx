@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -137,7 +137,7 @@ export default function GeneralLedgerPage() {
                   className="grid grid-cols-12 gap-3 border-b border-border-subtle/40 px-6 py-2.5 text-[13px] transition-colors hover:bg-black/[0.01]"
                 >
                   <div className="col-span-2 text-text-secondary">
-                    {entry.date}
+                    {formatDate(entry.date)}
                   </div>
                   <div className="col-span-2 font-mono text-[12px] text-text-secondary">
                     {entry.entryNumber}

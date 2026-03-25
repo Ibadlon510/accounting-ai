@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import { StyledSelect } from "@/components/ui/styled-select";
+import { showSuccess, showError } from "@/lib/utils/toast-helpers";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 
 type AccountRow = {
   id: string;
@@ -14,6 +16,12 @@ type AccountRow = {
   isSystem: boolean;
   taxCode: string | null;
   typeName: string;
+  category: string;
+};
+
+type AccountType = {
+  id: string;
+  name: string;
   category: string;
 };
 
@@ -27,17 +35,32 @@ const categoryColors: Record<string, string> = {
 
 export default function ChartOfAccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [accountTypes, setAccountTypes] = useState<AccountType[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(
     new Set(["Current Assets", "Current Liabilities", "Revenue", "Operating Expenses", "Equity"])
   );
 
-  useEffect(() => {
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formCode, setFormCode] = useState("");
+  const [formName, setFormName] = useState("");
+  const [formAccountTypeId, setFormAccountTypeId] = useState("");
+  const [formTaxCode, setFormTaxCode] = useState("");
+
+  const fetchAccounts = () => {
     fetch("/api/org/chart-of-accounts", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { accounts: [] }))
-      .then((data) => setAccounts(data.accounts ?? []))
+      .then((r) => (r.ok ? r.json() : { accounts: [], accountTypes: [] }))
+      .then((data) => {
+        setAccounts(data.accounts ?? []);
+        setAccountTypes(data.accountTypes ?? []);
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchAccounts();
   }, []);
 
   const filtered = accounts.filter(
@@ -46,7 +69,6 @@ export default function ChartOfAccountsPage() {
       a.code.includes(search)
   );
 
-  // Group by account type
   const grouped = filtered.reduce(
     (acc, account) => {
       const typeName = account.typeName ?? "Other";
@@ -66,6 +88,51 @@ export default function ChartOfAccountsPage() {
     });
   }
 
+  function resetForm() {
+    setFormCode("");
+    setFormName("");
+    setFormAccountTypeId("");
+    setFormTaxCode("");
+  }
+
+  async function handleAddAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formCode.trim() || !formName.trim() || !formAccountTypeId) {
+      showError("Validation error", "Code, name, and account type are required.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/org/chart-of-accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: formCode.trim(),
+          name: formName.trim(),
+          accountTypeId: formAccountTypeId,
+          taxCode: formTaxCode.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Failed to create account" }));
+        showError("Failed to create account", data.error);
+        return;
+      }
+
+      showSuccess("Account created", `${formCode.trim()} — ${formName.trim()}`);
+      resetForm();
+      setShowAddDialog(false);
+      setLoading(true);
+      fetchAccounts();
+    } catch {
+      showError("Network error", "Could not reach the server.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       {/* Toolbar */}
@@ -79,11 +146,109 @@ export default function ChartOfAccountsPage() {
             className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20"
           />
         </div>
-        <Button onClick={() => comingSoon("Add Account")} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <ImportExportButtons entity="chart-of-accounts" entityLabel="Chart of Accounts" onImportComplete={fetchAccounts} />
+        <Button
+          onClick={() => setShowAddDialog(true)}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+        >
           <Plus className="h-4 w-4" />
           Add Account
         </Button>
       </div>
+
+      {/* Add Account Dialog */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-[17px] font-semibold text-text-primary">Add Account</h2>
+              <button
+                onClick={() => { setShowAddDialog(false); resetForm(); }}
+                className="rounded-lg p-1.5 text-text-meta transition-colors hover:bg-black/5 hover:text-text-primary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAccount} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-secondary">
+                  Account Code <span className="text-error">*</span>
+                </label>
+                <Input
+                  placeholder="e.g. 1100"
+                  value={formCode}
+                  onChange={(e) => setFormCode(e.target.value)}
+                  maxLength={20}
+                  className="h-9 rounded-xl border-border-subtle bg-surface text-[13px] focus-visible:ring-text-primary/20"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-secondary">
+                  Account Name <span className="text-error">*</span>
+                </label>
+                <Input
+                  placeholder="e.g. Cash in Hand"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  maxLength={255}
+                  className="h-9 rounded-xl border-border-subtle bg-surface text-[13px] focus-visible:ring-text-primary/20"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-secondary">
+                  Account Type <span className="text-error">*</span>
+                </label>
+                <StyledSelect
+                  value={formAccountTypeId}
+                  onChange={(e) => setFormAccountTypeId(e.target.value)}
+                >
+                  <option value="">Select account type...</option>
+                  {accountTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.category})
+                    </option>
+                  ))}
+                </StyledSelect>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-secondary">
+                  Tax Code <span className="text-text-meta">(optional)</span>
+                </label>
+                <Input
+                  placeholder="e.g. VAT5, EXEMPT"
+                  value={formTaxCode}
+                  onChange={(e) => setFormTaxCode(e.target.value)}
+                  maxLength={20}
+                  className="h-9 rounded-xl border-border-subtle bg-surface text-[13px] focus-visible:ring-text-primary/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setShowAddDialog(false); resetForm(); }}
+                  className="h-9 rounded-xl border-border-subtle px-4 text-[13px]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="h-9 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+                >
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {saving ? "Creating..." : "Create Account"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Accounts Table */}
       <div className="dashboard-card overflow-hidden !p-0">

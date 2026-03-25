@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count, desc } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import { requireOrgRole } from "@/lib/auth/require-role";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -63,6 +64,9 @@ type LineInput = {
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const roleCheck = await requireOrgRole(orgId, "accountant");
+  if (roleCheck instanceof NextResponse) return roleCheck;
 
   let body: {
     date: string;
@@ -127,160 +131,156 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Generate expense number
-    const ym = date.slice(0, 7).replace("-", "");
-    const [countRow] = await db.select({ c: count() }).from(expenses).where(eq(expenses.organizationId, orgId));
-    const seq = (Number(countRow?.c ?? 0) + 1).toString().padStart(4, "0");
-    const expenseNumber = `EXP-${ym}-${seq}`;
+    const { expenseId, expenseNumber } = await db.transaction(async (tx) => {
+      const ym = date.slice(0, 7).replace("-", "");
+      const [countRow] = await tx.select({ c: count() }).from(expenses).where(eq(expenses.organizationId, orgId));
+      const seq = (Number(countRow?.c ?? 0) + 1).toString().padStart(4, "0");
+      const expNumber = `EXP-${ym}-${seq}`;
 
-    // Insert expense
-    const [exp] = await db
-      .insert(expenses)
-      .values({
-        organizationId: orgId,
-        expenseNumber,
-        date,
-        supplierId: body.supplierId || null,
-        supplierName,
-        bankAccountId,
-        description: body.description?.trim() || null,
-        subtotal: String(subtotal),
-        taxAmount: String(taxAmount),
-        total: String(total),
-        currency,
-        reference: body.reference?.trim() || null,
-      })
-      .returning({ id: expenses.id });
-
-    if (!exp) return NextResponse.json({ error: "Failed to create expense" }, { status: 500 });
-
-    // Insert expense lines
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      await db.insert(expenseLines).values({
-        expenseId: exp.id,
-        description: l.description.trim(),
-        glAccountId: l.glAccountId,
-        quantity: String(l.quantity ?? 1),
-        unitPrice: String(l.unitPrice ?? 0),
-        amount: String(l.amount ?? 0),
-        taxRate: String(l.taxRate ?? 5),
-        taxAmount: String(l.taxAmount ?? 0),
-        lineOrder: i + 1,
-      });
-    }
-
-    // Create journal entry: Dr Expense(s), Dr VAT Input, Cr Bank
-    const periodId = await resolveOrCreatePeriod(orgId, date);
-    let journalEntryId: string | null = null;
-
-    if (periodId) {
-      const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
-      const jeSeq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
-      const entryNumber = `JE-${ym}-${jeSeq}`;
-
-      const [je] = await db
-        .insert(journalEntries)
+      const [exp] = await tx
+        .insert(expenses)
         .values({
           organizationId: orgId,
-          periodId,
-          entryNumber,
-          entryDate: date,
-          description: `Expense — ${supplierName || expenseNumber}`,
-          reference: exp.id,
-          sourceType: "expense",
-          sourceId: exp.id,
-          status: "posted",
+          expenseNumber: expNumber,
+          date,
+          supplierId: body.supplierId || null,
+          supplierName,
+          bankAccountId,
+          description: body.description?.trim() || null,
+          subtotal: String(subtotal),
+          taxAmount: String(taxAmount),
+          total: String(total),
           currency,
-          totalDebit: String(total),
-          totalCredit: String(total),
-          postedAt: new Date(),
+          reference: body.reference?.trim() || null,
         })
-        .returning({ id: journalEntries.id });
+        .returning({ id: expenses.id });
 
-      if (je) {
-        journalEntryId = je.id;
-        const jl: (typeof journalLines.$inferInsert)[] = [];
-        let lineOrder = 1;
+      if (!exp) throw new Error("Failed to create expense");
 
-        for (const l of lines) {
-          const net = Number(l.amount) || 0;
-          const tax = Number(l.taxAmount) || 0;
-          if (net > 0) {
-            jl.push({
-              journalEntryId: je.id,
-              organizationId: orgId,
-              accountId: l.glAccountId,
-              description: l.description.trim(),
-              debit: String(net),
-              credit: "0",
-              currency,
-              baseCurrencyDebit: String(net),
-              baseCurrencyCredit: "0",
-              lineOrder: lineOrder++,
-            });
-          }
-          if (tax > 0) {
-            const [vatInput] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
-            if (vatInput) {
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        await tx.insert(expenseLines).values({
+          expenseId: exp.id,
+          description: l.description.trim(),
+          glAccountId: l.glAccountId,
+          quantity: String(l.quantity ?? 1),
+          unitPrice: String(l.unitPrice ?? 0),
+          amount: String(l.amount ?? 0),
+          taxRate: String(l.taxRate ?? 5),
+          taxAmount: String(l.taxAmount ?? 0),
+          lineOrder: i + 1,
+        });
+      }
+
+      const periodId = await resolveOrCreatePeriod(orgId, date, tx);
+      let journalEntryId: string | null = null;
+
+      if (periodId) {
+        const [entryCountRow] = await tx.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
+        const jeSeq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
+        const entryNumber = `JE-${ym}-${jeSeq}`;
+
+        const [je] = await tx
+          .insert(journalEntries)
+          .values({
+            organizationId: orgId,
+            periodId,
+            entryNumber,
+            entryDate: date,
+            description: `Expense — ${supplierName || expNumber}`,
+            reference: exp.id,
+            sourceType: "expense",
+            sourceId: exp.id,
+            status: "posted",
+            currency,
+            totalDebit: String(total),
+            totalCredit: String(total),
+            postedAt: new Date(),
+          })
+          .returning({ id: journalEntries.id });
+
+        if (je) {
+          journalEntryId = je.id;
+          const jl: (typeof journalLines.$inferInsert)[] = [];
+          let lineOrder = 1;
+
+          for (const l of lines) {
+            const net = Number(l.amount) || 0;
+            const tax = Number(l.taxAmount) || 0;
+            if (net > 0) {
               jl.push({
                 journalEntryId: je.id,
                 organizationId: orgId,
-                accountId: vatInput.id,
-                description: `VAT input — ${l.description.trim()}`,
-                debit: String(tax),
+                accountId: l.glAccountId,
+                description: l.description.trim(),
+                debit: String(net),
                 credit: "0",
                 currency,
-                baseCurrencyDebit: String(tax),
+                baseCurrencyDebit: String(net),
                 baseCurrencyCredit: "0",
-                taxCode: "VAT5",
-                taxAmount: String(tax),
                 lineOrder: lineOrder++,
               });
             }
+            if (tax > 0) {
+              const [vatInput] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+              if (vatInput) {
+                jl.push({
+                  journalEntryId: je.id,
+                  organizationId: orgId,
+                  accountId: vatInput.id,
+                  description: `VAT input — ${l.description.trim()}`,
+                  debit: String(tax),
+                  credit: "0",
+                  currency,
+                  baseCurrencyDebit: String(tax),
+                  baseCurrencyCredit: "0",
+                  taxCode: "VAT5",
+                  taxAmount: String(tax),
+                  lineOrder: lineOrder++,
+                });
+              }
+            }
           }
+
+          jl.push({
+            journalEntryId: je.id,
+            organizationId: orgId,
+            accountId: cashAccountId!,
+            description: `Payment — ${supplierName || expNumber}`,
+            debit: "0",
+            credit: String(total),
+            currency,
+            baseCurrencyDebit: "0",
+            baseCurrencyCredit: String(total),
+            lineOrder: lineOrder++,
+          });
+
+          if (jl.length > 0) await tx.insert(journalLines).values(jl);
         }
-
-        // Credit: Bank/Cash
-        jl.push({
-          journalEntryId: je.id,
-          organizationId: orgId,
-          accountId: cashAccountId!,
-          description: `Payment — ${supplierName || expenseNumber}`,
-          debit: "0",
-          credit: String(total),
-          currency,
-          baseCurrencyDebit: "0",
-          baseCurrencyCredit: String(total),
-          lineOrder: lineOrder++,
-        });
-
-        if (jl.length > 0) await db.insert(journalLines).values(jl);
       }
-    }
 
-    // Update expense with journal entry id
-    if (journalEntryId) {
-      await db.update(expenses).set({ journalEntryId }).where(eq(expenses.id, exp.id));
-    }
+      if (journalEntryId) {
+        await tx.update(expenses).set({ journalEntryId }).where(eq(expenses.id, exp.id));
+      }
 
-    // Create bank transaction (debit)
-    await db.insert(bankTransactions).values({
-      organizationId: orgId,
-      bankAccountId,
-      transactionDate: date,
-      description: `Expense — ${supplierName || expenseNumber}`,
-      amount: String(total),
-      type: "debit",
-      reference: exp.id,
-      category: "expense",
+      await tx.insert(bankTransactions).values({
+        organizationId: orgId,
+        bankAccountId,
+        transactionDate: date,
+        description: `Expense — ${supplierName || expNumber}`,
+        amount: String(total),
+        type: "debit",
+        reference: exp.id,
+        category: "expense",
+      });
+
+      const bal = parseFloat(ba.currentBalance ?? "0") - total;
+      await tx.update(bankAccounts).set({ currentBalance: String(bal) }).where(eq(bankAccounts.id, bankAccountId));
+
+      return { expenseId: exp.id, expenseNumber: expNumber };
     });
 
-    // Update bank account balance
-    const bal = parseFloat(ba.currentBalance ?? "0") - total;
-    await db.update(bankAccounts).set({ currentBalance: String(bal) }).where(eq(bankAccounts.id, bankAccountId));
-
-    return NextResponse.json({ ok: true, expense: { id: exp.id, expenseNumber } });
+    return NextResponse.json({ ok: true, expense: { id: expenseId, expenseNumber } });
   } catch (err) {
     console.error("POST /api/purchases/expenses error:", err);
     return NextResponse.json({ error: "Failed to create expense" }, { status: 500 });

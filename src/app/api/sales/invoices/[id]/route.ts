@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+import { getSessionUserId } from "@/lib/auth/helpers";
 import { db } from "@/lib/db";
 import {
   invoices,
   invoiceLines,
   customers,
+  organizations,
   chartOfAccounts,
   journalEntries,
   journalLines,
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import { sendDocumentEmail } from "@/lib/email/document-email";
 
 async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [inv] = await db
@@ -29,7 +32,13 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     .where(and(eq(invoices.id, invoiceId), eq(invoices.organizationId, orgId)))
     .limit(1);
 
-  if (!inv || inv.journalEntryId) return; // already has JE
+  if (!inv || inv.journalEntryId) return;
+
+  const [org] = await db
+    .select({ isVatRegistered: organizations.isVatRegistered })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
 
   const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, inv.customerId)).limit(1);
   const customerName = cust?.name ?? "Customer";
@@ -47,6 +56,12 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [vatAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
 
   if (!arAccount || !salesAccount) return;
+
+  const lines = await db
+    .select({ taxCode: invoiceLines.taxCode, taxAmount: invoiceLines.taxAmount })
+    .from(invoiceLines)
+    .where(eq(invoiceLines.invoiceId, inv.id));
+  const primaryTaxCode = lines.find((l) => l.taxCode)?.taxCode || "SR";
 
   const ym = inv.issueDate.slice(0, 7).replace("-", "");
   const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
@@ -101,7 +116,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     baseCurrencyCredit: String(subtotal),
     lineOrder: 2,
   });
-  if (taxAmount > 0 && vatAccount) {
+  if (org?.isVatRegistered && taxAmount > 0 && vatAccount) {
     jl.push({
       journalEntryId: je.id,
       organizationId: orgId,
@@ -112,7 +127,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       currency: cur,
       baseCurrencyDebit: "0",
       baseCurrencyCredit: String(taxAmount),
-      taxCode: "VAT5",
+      taxCode: primaryTaxCode,
       taxAmount: String(taxAmount),
       lineOrder: 3,
     });
@@ -173,6 +188,63 @@ export async function PATCH(
     // Create JE when invoice moves from draft to sent/confirmed (and no JE yet)
     if (status === "sent" && existing.status === "draft" && !existing.journalEntryId) {
       await createInvoiceJournalEntry(orgId, id);
+    }
+
+    // Auto-send invoice email on confirmation if org setting enabled
+    if (status === "sent" && existing.status === "draft") {
+      try {
+        const [org] = await db
+          .select({ autoSend: organizations.autoSendOnInvoiceConfirm })
+          .from(organizations)
+          .where(eq(organizations.id, orgId))
+          .limit(1);
+        if (org?.autoSend) {
+          const [inv] = await db
+            .select({
+              invoiceNumber: invoices.invoiceNumber,
+              customerId: invoices.customerId,
+              total: invoices.total,
+              currency: invoices.currency,
+              dueDate: invoices.dueDate,
+              issueDate: invoices.issueDate,
+            })
+            .from(invoices)
+            .where(eq(invoices.id, id))
+            .limit(1);
+          if (inv) {
+            const [cust] = await db
+              .select({ name: customers.name, email: customers.email })
+              .from(customers)
+              .where(eq(customers.id, inv.customerId))
+              .limit(1);
+            if (cust?.email) {
+              const senderId = (await getSessionUserId()) ?? "system";
+              sendDocumentEmail({
+                documentType: "invoice",
+                documentId: id,
+                documentNumber: inv.invoiceNumber,
+                recipientEmail: cust.email,
+                recipientName: cust.name,
+                senderId,
+                orgId,
+                data: {
+                  invoice: {
+                    id,
+                    invoiceNumber: inv.invoiceNumber,
+                    total: inv.total,
+                    currency: inv.currency,
+                    dueDate: inv.dueDate,
+                    issueDate: inv.issueDate,
+                  },
+                  customer: { name: cust.name, email: cust.email },
+                },
+              }).catch((err) => console.error("[auto-send-invoice] email failed:", err));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[auto-send-invoice] error:", err);
+      }
     }
 
     return NextResponse.json({ invoice: updated });

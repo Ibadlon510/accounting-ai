@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/accounting/engine";
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { comingSoon } from "@/lib/utils/toast-helpers";
+import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
 
 type Item = { id: string; name: string; sku: string; type: string; unitOfMeasure: string; costPrice: number; quantityOnHand: number; isActive: boolean; totalValue: number };
 
@@ -25,9 +23,7 @@ export default function InventoryValuationPage() {
   return (
     <>
       <div className="mb-6 flex items-center justify-end">
-        <Button onClick={() => comingSoon("Export PDF")} variant="outline" className="h-9 gap-2 rounded-xl border-border-subtle text-[12px]">
-          <Download className="h-3.5 w-3.5" /> Export PDF
-        </Button>
+        <ExportPdfButton documentType="inventory_valuation" />
       </div>
 
       <p className="mb-6 text-[13px] text-text-secondary">As of February 28, 2026 • Costing method: Weighted Average</p>

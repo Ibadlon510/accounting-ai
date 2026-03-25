@@ -1,14 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/hooks/use-workspace-store";
-
-// Configure worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export interface BoundingBox {
   field: string;
@@ -32,8 +26,24 @@ export function PdfViewer({ url, boundingBoxes = [], onFieldClick, className }: 
   const [pageWidth, setPageWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const { zoom, rotation, activeField } = useWorkspaceStore();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [ReactPdf, setReactPdf] = useState<{ Document: any; Page: any } | null>(null);
 
   const scale = zoom / 100;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod = await import("react-pdf");
+        await import("react-pdf/dist/Page/AnnotationLayer.css");
+        await import("react-pdf/dist/Page/TextLayer.css");
+        mod.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${mod.pdfjs.version}/build/pdf.worker.min.mjs`;
+        if (!cancelled) setReactPdf({ Document: mod.Document, Page: mod.Page });
+      } catch { /* viewer will show loading state */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const onDocumentLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
     setNumPages(n);
@@ -56,9 +66,22 @@ export function PdfViewer({ url, boundingBoxes = [], onFieldClick, className }: 
     return "rgba(239, 68, 68, 0.7)";
   }
 
+  if (!ReactPdf) {
+    return (
+      <div className={cn("overflow-auto", className)}>
+        <div className="flex items-center justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-subtle border-t-text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  const DocComponent = ReactPdf.Document;
+  const PageComponent = ReactPdf.Page;
+
   return (
     <div ref={containerRef} className={cn("overflow-auto", className)}>
-      <Document
+      <DocComponent
         file={url}
         onLoadSuccess={onDocumentLoadSuccess}
         loading={
@@ -82,14 +105,13 @@ export function PdfViewer({ url, boundingBoxes = [], onFieldClick, className }: 
               transition: "transform 0.3s ease",
             }}
           >
-            <Page
+            <PageComponent
               pageNumber={i + 1}
               width={pageWidth > 0 ? pageWidth * scale : undefined}
               renderTextLayer={true}
               renderAnnotationLayer={true}
             />
 
-            {/* Bounding box overlays */}
             {boundingBoxes
               .filter((b) => b.page === i + 1)
               .map((box) => (
@@ -116,7 +138,7 @@ export function PdfViewer({ url, boundingBoxes = [], onFieldClick, className }: 
               ))}
           </div>
         ))}
-      </Document>
+      </DocComponent>
     </div>
   );
 }

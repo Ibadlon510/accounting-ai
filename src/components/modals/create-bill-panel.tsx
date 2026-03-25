@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -16,19 +16,25 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber } from "@/lib/accounting/engine";
-import { Plus, Trash2, Info } from "lucide-react";
+import { Plus, Trash2, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
 import { AttachDocumentZone } from "@/components/workspace/attach-document-zone";
 import { ProductSelect, getProductPrice } from "@/components/documents/product-select";
+import { ContactSelect } from "@/components/documents/contact-select";
+import { GLCombobox, type GLAccount } from "@/components/ai/gl-combobox";
 type Supplier = { id: string; name: string; email: string; phone: string; isActive: boolean };
-type BillLine = { id: string; productId: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
+type BillLine = { id: string; productId: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number; accountId: string; taxCodeId: string };
+type TaxCode = { id: string; code: string; name: string; rate: number; type: string; isActive: boolean };
+type OrgConfig = { isVatRegistered: boolean; taxLabel: string; currency: string };
 
 interface CreateBillPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   suppliers: Supplier[];
+  onSupplierCreated?: (supplier: { id: string; name: string }) => void;
   onCreate: (bill: {
     supplierId: string;
     supplierName: string;
@@ -39,14 +45,17 @@ interface CreateBillPanelProps {
     subtotal: number;
     taxAmount: number;
     total: number;
+    notes?: string;
+    terms?: string;
+    paymentInfo?: string;
   }) => void | Promise<void>;
 }
 
-function emptyLine(): BillLine {
-  return { id: `new-${Date.now()}-${Math.random()}`, productId: "", description: "", quantity: 1, unitPrice: 0, amount: 0, taxRate: 5, taxAmount: 0 };
+function emptyLine(defaultTaxRate = 0, defaultTaxCodeId = ""): BillLine {
+  return { id: `new-${Date.now()}-${Math.random()}`, productId: "", description: "", quantity: 1, unitPrice: 0, amount: 0, taxRate: defaultTaxRate, taxAmount: 0, accountId: "", taxCodeId: defaultTaxCodeId };
 }
 
-export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: CreateBillPanelProps) {
+export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreated, onCreate }: CreateBillPanelProps) {
   const [supplierId, setSupplierId] = useState("");
   const [billNumber, setBillNumber] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
@@ -56,6 +65,49 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
   });
   const [lines, setLines] = useState<BillLine[]>([emptyLine()]);
   const [autoPost, setAutoPost] = useState(true);
+  const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState("");
+  const [paymentInfo, setPaymentInfo] = useState("");
+  const [showAdditional, setShowAdditional] = useState(false);
+  const [accounts, setAccounts] = useState<GLAccount[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCode[]>([]);
+  const [orgConfig, setOrgConfig] = useState<OrgConfig>({ isVatRegistered: true, taxLabel: "VAT", currency: "AED" });
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/org/document-defaults")
+      .then((r) => r.json())
+      .then((d) => {
+        const bill = d.defaults?.bill;
+        if (bill) {
+          if (bill.defaultTerms) setTerms(bill.defaultTerms);
+          if (bill.defaultNotes) setNotes(bill.defaultNotes);
+          if (bill.defaultPaymentInfo) setPaymentInfo(bill.defaultPaymentInfo);
+        }
+      })
+      .catch(() => {});
+    fetch("/api/org/chart-of-accounts")
+      .then((r) => (r.ok ? r.json() : { accounts: [] }))
+      .then((d) => setAccounts((d.accounts ?? []).filter((a: GLAccount & { isActive?: boolean }) => a.isActive !== false)))
+      .catch(() => {});
+    fetch("/api/org/current")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setOrgConfig({ isVatRegistered: d.isVatRegistered ?? true, taxLabel: d.taxLabel ?? "VAT", currency: d.currency ?? "AED" });
+      })
+      .catch(() => {});
+    fetch("/api/org/tax-codes")
+      .then((r) => (r.ok ? r.json() : { taxCodes: [] }))
+      .then((d) => {
+        const active = (d.taxCodes ?? []).filter((tc: TaxCode) => tc.isActive);
+        setTaxCodes(active);
+        const defaultTc = active.find((tc: TaxCode) => tc.rate > 0) ?? active[0];
+        if (defaultTc) {
+          setLines((prev) => prev.map((l) => l.taxRate === 0 && !l.taxCodeId ? { ...l, taxRate: defaultTc.rate, taxCodeId: defaultTc.id } : l));
+        }
+      })
+      .catch(() => {});
+  }, [open]);
 
   function updateLine(index: number, field: keyof BillLine, value: string | number) {
     setLines((prev) =>
@@ -87,7 +139,8 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
     );
   }
 
-  function addLine() { setLines((prev) => [...prev, emptyLine()]); }
+  const defaultTaxCode = taxCodes.find((tc) => tc.rate > 0) ?? taxCodes[0];
+  function addLine() { setLines((prev) => [...prev, emptyLine(defaultTaxCode?.rate ?? 0, defaultTaxCode?.id ?? "")]); }
   function removeLine(index: number) { if (lines.length > 1) setLines((prev) => prev.filter((_, i) => i !== index)); }
 
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
@@ -95,7 +148,8 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
   const total = subtotal + taxAmount;
 
   function reset() {
-    setSupplierId(""); setBillNumber(""); setLines([emptyLine()]); setAutoPost(true);
+    setSupplierId(""); setBillNumber(""); setLines([emptyLine(defaultTaxCode?.rate ?? 0, defaultTaxCode?.id ?? "")]); setAutoPost(true);
+    setNotes(""); setTerms(""); setPaymentInfo(""); setShowAdditional(false);
     setIssueDate(new Date().toISOString().slice(0, 10));
     const d = new Date(); d.setDate(d.getDate() + 30);
     setDueDate(d.toISOString().slice(0, 10));
@@ -113,8 +167,11 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
         subtotal: Math.round(subtotal * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
+        notes: notes.trim() || undefined,
+        terms: terms.trim() || undefined,
+        paymentInfo: paymentInfo.trim() || undefined,
       });
-      showSuccess("Bill recorded", `Bill ${billNumber} for AED ${formatNumber(total)} has been recorded.`);
+      showSuccess("Bill recorded", `Bill ${billNumber} for ${orgConfig.currency} ${formatNumber(total)} has been recorded.`);
       reset();
       onOpenChange(false);
     } catch {
@@ -135,12 +192,15 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
             <div className="mb-6 grid grid-cols-4 gap-4">
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Supplier</Label>
-                <StyledSelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                  <option value="">Select supplier</option>
-                  {suppliers.filter((s) => s.isActive).map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </StyledSelect>
+                <ContactSelect
+                  type="supplier"
+                  value={supplierId}
+                  onChange={setSupplierId}
+                  contacts={suppliers.map((s) => ({ id: s.id, name: s.name, email: s.email, isActive: s.isActive }))}
+                  onContactCreated={(contact) => onSupplierCreated?.(contact)}
+                  placeholder="Select supplier"
+                  className="h-9"
+                />
               </div>
               <div>
                 <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Bill Number</Label>
@@ -158,16 +218,17 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
 
             <div className="rounded-2xl border border-border-subtle overflow-hidden">
               <div className="grid grid-cols-12 gap-2 bg-muted/30 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-meta">
-                <div className="col-span-5">Description</div>
+                <div className="col-span-3">Description</div>
+                <div className="col-span-2">Account</div>
                 <div className="col-span-1 text-right">Qty</div>
                 <div className="col-span-2 text-right">Unit Price</div>
-                <div className="col-span-1 text-center">VAT</div>
+                <div className="col-span-1 text-center">{orgConfig.taxLabel}</div>
                 <div className="col-span-2 text-right">Amount</div>
                 <div className="col-span-1"></div>
               </div>
               {lines.map((line, i) => (
                 <div key={line.id} className="grid grid-cols-12 items-start gap-2 border-t border-border-subtle px-4 py-3">
-                  <div className="col-span-5 space-y-1.5">
+                  <div className="col-span-3 space-y-1.5">
                     <ProductSelect
                       value={line.productId}
                       onChange={(productId, product) => {
@@ -176,6 +237,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                             productId,
                             description: product.name,
                             unitPrice: getProductPrice(product, "purchase"),
+                            accountId: product.purchaseAccountId ?? "",
                           });
                         } else {
                           updateLine(i, "productId", productId);
@@ -191,6 +253,15 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                       className="h-8 rounded-lg border-border-subtle text-[13px]"
                     />
                   </div>
+                  <div className="col-span-2 pt-1">
+                    <GLCombobox
+                      accounts={accounts}
+                      value={line.accountId}
+                      onChange={(accountId) => updateLine(i, "accountId", accountId)}
+                      disabled={!!line.productId}
+                      className="h-8 min-h-8 [&_button]:h-8 [&_button]:text-[12px]"
+                    />
+                  </div>
                   <div className="col-span-1 pt-1">
                     <Input type="number" min="1" value={line.quantity} onChange={(e) => updateLine(i, "quantity", Number(e.target.value))} className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
@@ -198,10 +269,23 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                     <Input type="number" min="0" step="0.01" value={line.unitPrice || ""} onChange={(e) => updateLine(i, "unitPrice", Number(e.target.value))} placeholder="0.00" className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
                   <div className="col-span-1 pt-1">
-                    <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
-                      <option value={5}>5%</option>
-                      <option value={0}>0%</option>
-                    </StyledSelect>
+                    {orgConfig.isVatRegistered ? (
+                      <StyledSelect
+                        value={line.taxCodeId}
+                        onChange={(e) => {
+                          const tc = taxCodes.find((t) => t.id === e.target.value);
+                          updateLineFields(i, { taxCodeId: e.target.value, taxRate: tc?.rate ?? 0 });
+                        }}
+                        className="h-8 text-center text-[12px]"
+                      >
+                        {taxCodes.length === 0 && <option value="">0%</option>}
+                        {taxCodes.map((tc) => (
+                          <option key={tc.id} value={tc.id}>{tc.rate}%</option>
+                        ))}
+                      </StyledSelect>
+                    ) : (
+                      <span className="flex h-8 items-center justify-center text-[12px] text-text-meta">0%</span>
+                    )}
                   </div>
                   <div className="col-span-2 pt-1 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
                   <div className="col-span-1 flex justify-center pt-1">
@@ -218,10 +302,40 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
 
             <div className="mt-4 flex justify-end">
               <div className="w-64 space-y-1.5 text-[13px]">
-                <div className="flex justify-between text-text-secondary"><span>Subtotal</span><span className="font-mono font-medium text-text-primary">AED {formatNumber(subtotal)}</span></div>
-                <div className="flex justify-between text-text-secondary"><span>VAT</span><span className="font-mono font-medium text-text-primary">AED {formatNumber(taxAmount)}</span></div>
-                <div className="flex justify-between border-t border-border-subtle pt-1.5 text-[15px] font-bold text-text-primary"><span>Total</span><span className="font-mono">AED {formatNumber(total)}</span></div>
+                <div className="flex justify-between text-text-secondary"><span>Subtotal</span><span className="font-mono font-medium text-text-primary">{orgConfig.currency} {formatNumber(subtotal)}</span></div>
+                {orgConfig.isVatRegistered && (
+                  <div className="flex justify-between text-text-secondary"><span>{orgConfig.taxLabel}</span><span className="font-mono font-medium text-text-primary">{orgConfig.currency} {formatNumber(taxAmount)}</span></div>
+                )}
+                <div className="flex justify-between border-t border-border-subtle pt-1.5 text-[15px] font-bold text-text-primary"><span>Total</span><span className="font-mono">{orgConfig.currency} {formatNumber(total)}</span></div>
               </div>
+            </div>
+
+            {/* Additional Details */}
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => setShowAdditional(!showAdditional)}
+                className="flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary"
+              >
+                {showAdditional ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                Additional Details
+              </button>
+              {showAdditional && (
+                <div className="mt-3 space-y-4 rounded-xl border border-border-subtle p-4">
+                  <div>
+                    <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Terms &amp; Conditions</Label>
+                    <Textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="Payment terms, conditions..." rows={3} className="resize-none rounded-xl border-border-subtle text-[13px]" />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Notes</Label>
+                    <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes for this bill..." rows={3} className="resize-none rounded-xl border-border-subtle text-[13px]" />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-meta">Payment Information</Label>
+                    <Textarea value={paymentInfo} onChange={(e) => setPaymentInfo(e.target.value)} placeholder="Bank details, payment methods..." rows={3} className="resize-none rounded-xl border-border-subtle text-[13px]" />
+                  </div>
+                </div>
+              )}
             </div>
           </EntityPanelMain>
 
@@ -244,7 +358,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
                         quantity: 1,
                         unitPrice: Math.round(net * 100) / 100,
                         amount: Math.round(net * 100) / 100,
-                        taxRate: net > 0 ? Math.round((tax / net) * 100) : 5,
+                        taxRate: net > 0 ? Math.round((tax / net) * 100) : 0,
                         taxAmount: Math.round(tax * 100) / 100,
                       }]);
                     }
@@ -257,7 +371,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
               />
             </EntityPanelSidebarSection>
             <EntityPanelSidebarSection title="Currency">
-              <p className="text-[14px] font-medium text-text-primary">AED — UAE Dirham</p>
+              <p className="text-[14px] font-medium text-text-primary">{orgConfig.currency}</p>
             </EntityPanelSidebarSection>
             <EntityPanelSidebarSection title="Posting">
               <div className="flex items-start gap-2">
@@ -268,7 +382,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onCreate }: Cre
               </div>
             </EntityPanelSidebarSection>
             <EntityPanelInfoMessage icon={<Info className="h-3.5 w-3.5" />}>
-              Input VAT will be automatically tracked for your VAT return
+              Input {orgConfig.taxLabel} will be automatically tracked for your {orgConfig.taxLabel} return
             </EntityPanelInfoMessage>
           </EntityPanelSidebar>
         </EntityPanelBody>

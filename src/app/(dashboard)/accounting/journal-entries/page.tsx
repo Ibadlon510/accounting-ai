@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { useState, useEffect, useCallback } from "react";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import {
   Search,
   Plus,
@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateJournalEntryPanel } from "@/components/modals/create-journal-entry-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import type { JournalEntry } from "@/types/accounting";
 
 const statusColors: Record<string, string> = {
@@ -26,12 +27,16 @@ export default function JournalEntriesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
 
-  useEffect(() => {
+  const loadEntries = useCallback(() => {
     fetch("/api/accounting/journal-entries", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : { entries: [] })
       .then((d) => setEntries(d.entries ?? []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
 
   async function handleCreate(data: { entryDate: string; description: string; reference: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
     const res = await fetch("/api/accounting/journal-entries", {
@@ -74,6 +79,7 @@ export default function JournalEntriesPage() {
             className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20"
           />
         </div>
+        <ImportExportButtons entity="journal-entries" entityLabel="Journal Entries" onImportComplete={loadEntries} />
         <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" />
           New Journal Entry
@@ -127,7 +133,7 @@ export default function JournalEntriesPage() {
                     AED {formatNumber(entry.totalDebit)}
                   </p>
                   <p className="text-[11px] text-text-meta">
-                    {entry.entryDate}
+                    {formatDate(entry.entryDate)}
                   </p>
                 </div>
                 <div className="ml-2">

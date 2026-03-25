@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { items } from "@/lib/db/schema";
+import { items, organizations, taxCodes } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
@@ -30,6 +30,8 @@ export async function GET() {
         taxCode: i.taxCode,
         trackInventory: i.trackInventory,
         isActive: i.isActive,
+        salesAccountId: i.salesAccountId ?? null,
+        purchaseAccountId: i.purchaseAccountId ?? null,
       })),
     });
   } catch (e: unknown) {
@@ -63,6 +65,19 @@ export async function POST(request: Request) {
   const reorderLevel = type === "product" ? (isNaN(Number(body.reorderLevel)) ? 5 : Number(body.reorderLevel)) : null;
 
   try {
+    const [org] = await db
+      .select({ defaultTaxCodeId: organizations.defaultTaxCodeId })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    let defaultTaxCode = "SR";
+    let defaultTaxCodeIdValue: string | null = org?.defaultTaxCodeId ?? null;
+    if (defaultTaxCodeIdValue) {
+      const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, defaultTaxCodeIdValue)).limit(1);
+      if (tc) defaultTaxCode = tc.code;
+    }
+
     const [row] = await db
       .insert(items)
       .values({
@@ -76,7 +91,8 @@ export async function POST(request: Request) {
         costPrice: String(purchasePrice),
         quantityOnHand: String(quantityOnHand),
         reorderLevel: reorderLevel != null ? String(reorderLevel) : null,
-        taxCode: "VAT5",
+        taxCode: defaultTaxCode,
+        defaultTaxCodeId: defaultTaxCodeIdValue,
         trackInventory: type === "product",
         isActive: true,
       })
@@ -98,7 +114,7 @@ export async function POST(request: Request) {
         costPrice: parseFloat(row.purchasePrice ?? "0"),
         quantityOnHand,
         reorderLevel: reorderLevel ?? 0,
-        taxCode: "VAT5",
+        taxCode: defaultTaxCode,
         trackInventory: type === "product",
         isActive: true,
       },

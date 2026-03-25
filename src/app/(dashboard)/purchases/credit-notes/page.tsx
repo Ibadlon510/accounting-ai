@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -146,7 +146,7 @@ export default function PurchaseCreditNotesPage() {
             className="grid w-full grid-cols-12 gap-4 border-b border-border-subtle/50 px-6 py-3.5 text-left text-[13px] transition-colors hover:bg-black/[0.01]"
           >
             <div className="col-span-2 font-mono font-medium text-text-primary">{cn.creditNoteNumber}</div>
-            <div className="col-span-2 text-text-secondary">{cn.date}</div>
+            <div className="col-span-2 text-text-secondary">{formatDate(cn.date)}</div>
             <div className="col-span-3 text-text-primary">{cn.supplierName || "—"}</div>
             <div className="col-span-2">
               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusColors[cn.status] ?? ""}`}>

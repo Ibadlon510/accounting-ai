@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatNumber } from "@/lib/accounting/engine";
+import { formatNumber, formatDate } from "@/lib/accounting/engine";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateInvoicePanel } from "@/components/modals/create-invoice-panel";
+import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import { ViewInvoicePanel } from "@/components/overlays/view-invoice-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordPaymentPanel } from "@/components/modals/record-payment-panel";
@@ -38,17 +39,23 @@ export default function InvoicesPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function loadInvoices() {
-    fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch(() => {});
+    fetch("/api/sales/invoices", { cache: "no-store" }).then((r) => r.ok ? r.json() : { invoices: [] }).then((d) => setInvoices(d.invoices ?? [])).catch((err) => {
+      console.error("[invoices] fetch error:", err);
+    });
   }
 
   function loadCustomers() {
-    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })).then((d) => setCustomers(d.customers ?? [])).catch(() => {});
+    fetch("/api/sales/customers", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { customers: [] })).then((d) => setCustomers(d.customers ?? [])).catch((err) => {
+      console.error("[invoices] customers fetch error:", err);
+    });
   }
 
   useEffect(() => {
     loadInvoices();
     loadCustomers();
-    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch(() => {});
+    fetch("/api/banking", { cache: "no-store" }).then((r) => r.ok ? r.json() : { accounts: [] }).then((d) => setBankAccounts(d.accounts ?? [])).catch((err) => {
+      console.error("[invoices] bank accounts fetch error:", err);
+    });
   }, []);
 
   async function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number }) {
@@ -88,6 +95,7 @@ export default function InvoicesPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-meta" />
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
+        <ImportExportButtons entity="invoices" entityLabel="Invoices" onImportComplete={loadInvoices} />
         <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
           <Plus className="h-4 w-4" /> New Invoice
         </Button>
@@ -182,8 +190,8 @@ export default function InvoicesPage() {
           >
             <div className="col-span-2 font-mono font-medium text-text-primary">{inv.invoiceNumber}</div>
             <div className="col-span-3 text-text-primary">{inv.customerName}</div>
-            <div className="col-span-1 text-text-secondary">{inv.issueDate}</div>
-            <div className="col-span-1 text-text-secondary">{inv.dueDate}</div>
+            <div className="col-span-1 text-text-secondary">{formatDate(inv.issueDate)}</div>
+            <div className="col-span-1 text-text-secondary">{formatDate(inv.dueDate)}</div>
             <div className="col-span-1">
               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusColors[inv.status]}`}>{inv.status}</span>
             </div>

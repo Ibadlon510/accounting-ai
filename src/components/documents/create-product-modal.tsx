@@ -23,6 +23,8 @@ export type Product = {
   salesPrice: number;
   purchasePrice: number;
   unitOfMeasure: string;
+  salesAccountId?: string | null;
+  purchaseAccountId?: string | null;
 };
 
 type CreateProductModalProps = {

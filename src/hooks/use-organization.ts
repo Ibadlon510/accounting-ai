@@ -4,6 +4,33 @@ import { useCallback, useEffect, useState } from "react";
 
 const CURRENT_ORG_COOKIE = "current_org_id";
 
+type OrgData = {
+  id: string;
+  name: string;
+  currency: string;
+  isVatRegistered: boolean;
+  taxLabel: string;
+  defaultTaxCodeId: string | null;
+  role: string;
+};
+
+export function useOrganization() {
+  const [org, setOrg] = useState<OrgData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/org/current", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setOrg(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  return { org, loading };
+}
+
 /**
  * Client-side hook to read current org ID from document.cookie (for display).
  * For API calls, use server getCurrentOrganizationId() so cookie is in request.
@@ -29,6 +56,48 @@ export function useCurrentOrgId(): string | null {
   }, []);
 
   return orgId;
+}
+
+type OrgConfig = {
+  currency: string;
+  taxLabel: string;
+  isVatRegistered: boolean;
+};
+
+const orgConfigCache: { data: OrgConfig | null; promise: Promise<OrgConfig> | null } = {
+  data: null,
+  promise: null,
+};
+
+export function useOrgConfig(): OrgConfig {
+  const [config, setConfig] = useState<OrgConfig>({
+    currency: "AED",
+    taxLabel: "VAT",
+    isVatRegistered: false,
+  });
+
+  useEffect(() => {
+    if (orgConfigCache.data) {
+      setConfig(orgConfigCache.data);
+      return;
+    }
+    if (!orgConfigCache.promise) {
+      orgConfigCache.promise = fetch("/api/org/current", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const cfg: OrgConfig = {
+            currency: data?.currency ?? "AED",
+            taxLabel: data?.taxLabel ?? "VAT",
+            isVatRegistered: data?.isVatRegistered ?? false,
+          };
+          orgConfigCache.data = cfg;
+          return cfg;
+        });
+    }
+    orgConfigCache.promise.then((cfg) => setConfig(cfg)).catch(() => {});
+  }, []);
+
+  return config;
 }
 
 /**

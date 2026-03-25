@@ -34,6 +34,14 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+*.env
+
+# runtime files from start/stop scripts
+.pid
+app.log
+app.error.log
+start.cmd
+stop.cmd
 
 # vercel
 .vercel

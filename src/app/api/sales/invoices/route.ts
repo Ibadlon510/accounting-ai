@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { invoices, invoiceLines, customers, paymentAllocations, payments, documents, documentTransactions } from "@/lib/db/schema";
+import { invoices, invoiceLines, customers, paymentAllocations, payments, documents, documentTransactions, organizations, taxCodes } from "@/lib/db/schema";
 import { eq, sql, count, and } from "drizzle-orm";
 import { deriveInvoiceStatus } from "@/lib/accounting/document-status";
+import { requireOrgRole } from "@/lib/auth/require-role";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -15,6 +16,7 @@ export async function GET() {
         id: invoices.id,
         customerId: invoices.customerId,
         customerName: customers.name,
+        customerEmail: customers.email,
         invoiceNumber: invoices.invoiceNumber,
         issueDate: invoices.issueDate,
         dueDate: invoices.dueDate,
@@ -25,6 +27,10 @@ export async function GET() {
         total: invoices.total,
         amountPaid: invoices.amountPaid,
         amountDue: invoices.amountDue,
+        creditApplied: invoices.creditApplied,
+        notes: invoices.notes,
+        terms: invoices.terms,
+        paymentInfo: invoices.paymentInfo,
         documentId: invoices.documentId,
       })
       .from(invoices)
@@ -102,6 +108,8 @@ export async function GET() {
         inv.dueDate
       );
 
+      const creditAppliedNum = parseFloat(inv.creditApplied ?? "0");
+
       result.push({
         ...inv,
         status: derivedStatus,
@@ -110,6 +118,7 @@ export async function GET() {
         total: parseFloat(inv.total ?? "0"),
         amountPaid: amountPaidNum,
         amountDue: amountDueNum,
+        creditApplied: creditAppliedNum,
         paymentId,
         receipts,
         lines: lines.map((l) => ({
@@ -126,19 +135,21 @@ export async function GET() {
 
     return NextResponse.json({ invoices: result });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Failed to load invoices";
-    console.error("Invoices API error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[sales/invoices GET] Error:", e);
+    return NextResponse.json({ error: "Failed to load invoices" }, { status: 500 });
   }
 }
 
-type LineInput = { id?: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate?: number; taxAmount?: number };
+type LineInput = { id?: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate?: number; taxAmount?: number; taxCodeId?: string; taxCode?: string };
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { customerId: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number };
+  const roleCheck = await requireOrgRole(orgId, "accountant");
+  if (roleCheck instanceof NextResponse) return roleCheck;
+
+  let body: { customerId: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string };
   try {
     body = await request.json();
   } catch {
@@ -153,6 +164,18 @@ export async function POST(request: Request) {
   if (totalNum <= 0) return NextResponse.json({ error: "Total must be greater than zero" }, { status: 400 });
 
   try {
+    const [org] = await db
+      .select({ isVatRegistered: organizations.isVatRegistered, defaultTaxCodeId: organizations.defaultTaxCodeId })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    let defaultTaxCode = "SR";
+    if (org?.defaultTaxCodeId) {
+      const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, org.defaultTaxCodeId)).limit(1);
+      if (tc) defaultTaxCode = tc.code;
+    }
+
     const [{ value: cnt }] = await db.select({ value: count() }).from(invoices).where(eq(invoices.organizationId, orgId));
     const year = new Date().getFullYear();
     const invoiceNumber = `INV-${year}-${String((cnt ?? 0) + 1).padStart(3, "0")}`;
@@ -167,10 +190,13 @@ export async function POST(request: Request) {
         dueDate,
         status: "draft",
         subtotal: String(Number(subtotal) || 0),
-        taxAmount: String(Number(taxAmount) || 0),
+        taxAmount: String(org?.isVatRegistered ? (Number(taxAmount) || 0) : 0),
         total: String(totalNum),
         amountPaid: "0",
         amountDue: String(totalNum),
+        notes: body.notes?.trim() || null,
+        terms: body.terms?.trim() || null,
+        paymentInfo: body.paymentInfo?.trim() || null,
       })
       .returning({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, customerId: invoices.customerId, issueDate: invoices.issueDate, dueDate: invoices.dueDate, status: invoices.status, subtotal: invoices.subtotal, taxAmount: invoices.taxAmount, total: invoices.total, amountPaid: invoices.amountPaid, amountDue: invoices.amountDue });
 
@@ -181,8 +207,16 @@ export async function POST(request: Request) {
       const qty = Number(l.quantity) || 0;
       const price = Number(l.unitPrice) || 0;
       const amt = Number(l.amount) || (qty * price);
-      const rate = isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate);
-      const taxAmt = isNaN(Number(l.taxAmount)) ? Math.round(amt * rate / 100 * 100) / 100 : Number(l.taxAmount);
+      const rate = org?.isVatRegistered ? (isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate)) : 0;
+      const taxAmt = org?.isVatRegistered ? (isNaN(Number(l.taxAmount)) ? Math.round(amt * rate / 100 * 100) / 100 : Number(l.taxAmount)) : 0;
+
+      let lineTaxCode = l.taxCode || defaultTaxCode;
+      let lineTaxCodeId = l.taxCodeId || null;
+      if (lineTaxCodeId) {
+        const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, lineTaxCodeId)).limit(1);
+        if (tc) lineTaxCode = tc.code;
+      }
+
       await db.insert(invoiceLines).values({
         invoiceId: inv.id,
         itemId: l.productId || null,
@@ -190,7 +224,8 @@ export async function POST(request: Request) {
         quantity: String(qty),
         unitPrice: String(price),
         amount: String(amt),
-        taxCode: "VAT5",
+        taxCode: lineTaxCode,
+        taxCodeId: lineTaxCodeId,
         taxRate: String(rate),
         taxAmount: String(taxAmt),
         lineOrder: i,
@@ -218,14 +253,13 @@ export async function POST(request: Request) {
           quantity: Number(l.quantity) || 0,
           unitPrice: Number(l.unitPrice) || 0,
           amount: Number(l.amount) || 0,
-          taxRate: isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate),
+          taxRate: isNaN(Number(l.taxRate)) ? 0 : Number(l.taxRate),
           taxAmount: Number(l.taxAmount) || 0,
         })),
       },
     });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Failed to create invoice";
-    console.error("Invoices POST error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[sales/invoices POST] Error:", e);
+    return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 });
   }
 }

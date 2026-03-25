@@ -12,11 +12,20 @@ export async function resolveOrCreatePeriod(
 ): Promise<string | null> {
   const dbClient = (client ?? db) as DbClient;
   const [existing] = await dbClient
-    .select({ id: accountingPeriods.id })
+    .select({ id: accountingPeriods.id, status: accountingPeriods.status, name: accountingPeriods.name, fiscalYearId: accountingPeriods.fiscalYearId })
     .from(accountingPeriods)
     .where(and(eq(accountingPeriods.organizationId, orgId), lte(accountingPeriods.startDate, txnDate), gte(accountingPeriods.endDate, txnDate)))
     .limit(1);
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.status === "closed" || existing.status === "locked") {
+      throw new Error(`Cannot post to ${existing.status} period: ${existing.name}`);
+    }
+    const [fy] = await dbClient.select({ isClosed: fiscalYears.isClosed, name: fiscalYears.name }).from(fiscalYears).where(eq(fiscalYears.id, existing.fiscalYearId)).limit(1);
+    if (fy?.isClosed) {
+      throw new Error(`Cannot post to closed fiscal year: ${fy.name}`);
+    }
+    return existing.id;
+  }
 
   const d = new Date(txnDate);
   const year = d.getFullYear();
@@ -26,8 +35,11 @@ export async function resolveOrCreatePeriod(
   const fyName = `FY ${year}`;
 
   let fyId: string;
-  const [existingFy] = await dbClient.select({ id: fiscalYears.id }).from(fiscalYears).where(and(eq(fiscalYears.organizationId, orgId), eq(fiscalYears.name, fyName))).limit(1);
+  const [existingFy] = await dbClient.select({ id: fiscalYears.id, isClosed: fiscalYears.isClosed }).from(fiscalYears).where(and(eq(fiscalYears.organizationId, orgId), eq(fiscalYears.name, fyName))).limit(1);
   if (existingFy) {
+    if (existingFy.isClosed) {
+      throw new Error(`Cannot post to closed fiscal year: ${fyName}`);
+    }
     fyId = existingFy.id;
   } else {
     const [newFy] = await dbClient.insert(fiscalYears).values({ organizationId: orgId, name: fyName, startDate: fyStart, endDate: fyEnd }).returning({ id: fiscalYears.id });
