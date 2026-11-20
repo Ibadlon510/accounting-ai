@@ -1037,3 +1037,77 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Consolidation groups (multi-company) ───────────────────
+export const consolidationGroups = pgTable(
+  "consolidation_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("consolidation_groups_org_idx").on(t.organizationId)]
+);
+
+export const consolidationGroupMembers = pgTable(
+  "consolidation_group_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => consolidationGroups.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("consolidation_group_members_group_org_idx").on(
+      t.groupId,
+      t.organizationId
+    ),
+    index("consolidation_group_members_org_idx").on(t.organizationId),
+  ]
+);
+
+/**
+ * Stub for future intercompany eliminations.
+ * TODO: apply rules when generating consolidated reports.
+ */
+export const consolidationEliminationRules = pgTable(
+  "consolidation_elimination_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => consolidationGroups.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    ruleType: varchar("rule_type", { length: 50 })
+      .notNull()
+      .default("intercompany"),
+    isActive: boolean("is_active").notNull().default(false),
+    config: jsonb("config"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("consolidation_elimination_rules_group_idx").on(t.groupId)]
+);

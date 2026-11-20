@@ -1,6 +1,10 @@
 // Agar billing plans — all prices in fils (AED minor unit)
 // 19.00 AED = 1900 fils
 
+/** Shared message for ARCHIVE write blocks (API + UI). Safe for client imports. */
+export const ARCHIVE_READONLY_MESSAGE =
+  "This workspace is archived. Restore your subscription to make changes.";
+
 export const PLANS = {
   FREE: {
     key: "FREE" as const,
@@ -47,6 +51,24 @@ export const PLANS = {
       "AI token top-ups available",
       "Priority support",
       "Advanced reports & analytics",
+    ],
+  },
+  ARCHIVE: {
+    key: "ARCHIVE" as const,
+    name: "Archive",
+    monthlyPrice: 0,
+    annualPrice: 0,
+    currency: "AED",
+    maxUsers: 1,
+    journalEntriesPerMonth: 0,
+    monthlyTokens: 0,
+    freeAiDocs: 0,
+    freeAiStatements: 0,
+    topUpAllowed: false,
+    features: [
+      "Read-only access to documents and reports",
+      "No new transactions or uploads",
+      "Renew Pro to restore full access",
     ],
   },
 } as const;

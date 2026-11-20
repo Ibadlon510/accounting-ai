@@ -17,6 +17,7 @@ import {
   Settings,
   Grid3X3,
   FolderOpen,
+  GitMerge,
   LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -46,6 +47,7 @@ const baseNavItems = [
   { icon: Package, label: "Inventory", href: "/inventory" },
   { icon: Landmark, label: "Banking", href: "/banking" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
+  { icon: GitMerge, label: "Consolidation", href: "/consolidation" },
   { icon: Receipt, label: "VAT", href: "/vat" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
