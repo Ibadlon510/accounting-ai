@@ -1037,3 +1037,54 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Budgets (per account / period with variance vs actuals) ─
+export const budgets = pgTable("budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  fiscalYearId: uuid("fiscal_year_id").references(() => fiscalYears.id, {
+    onDelete: "set null",
+  }),
+  periodId: uuid("period_id").references(() => accountingPeriods.id, {
+    onDelete: "set null",
+  }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("draft"), // draft, active, closed
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("budgets_org_status_idx").on(t.organizationId, t.status),
+  index("budgets_org_dates_idx").on(t.organizationId, t.startDate, t.endDate),
+]);
+
+export const budgetLines = pgTable("budget_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  budgetId: uuid("budget_id")
+    .notNull()
+    .references(() => budgets.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  periodId: uuid("period_id").references(() => accountingPeriods.id, {
+    onDelete: "set null",
+  }),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  lineOrder: integer("line_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("budget_lines_budget_idx").on(t.budgetId),
+  index("budget_lines_org_account_idx").on(t.organizationId, t.accountId),
+]);
