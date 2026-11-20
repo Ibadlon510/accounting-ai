@@ -9,6 +9,7 @@ import {
   bills,
 } from "@/lib/db/schema";
 import { eq, and, gt, inArray } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -79,6 +80,9 @@ type ApplyCreditBody = {
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const userId = await getSessionUserId();
 

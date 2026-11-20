@@ -19,6 +19,8 @@ import { useDashboardPillPreferences } from "@/hooks/use-dashboard-pill-preferen
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 import type { InventoryMiniStats } from "@/lib/dashboard/mini-stats-types";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -46,6 +48,7 @@ type Item = {
 
 export default function InventoryPage() {
   usePageTitle("Inventory");
+  const { isArchived } = useIsArchived();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -267,7 +270,12 @@ export default function InventoryPage() {
           <Input placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
         <ImportExportButtons entity="items" entityLabel="Items" onImportComplete={loadItems} />
-        <Button onClick={() => setAddOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <Button
+          onClick={() => setAddOpen(true)}
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" /> Add Item
         </Button>
         <AddItemPanel open={addOpen} onOpenChange={setAddOpen} onCreate={handleCreate} />

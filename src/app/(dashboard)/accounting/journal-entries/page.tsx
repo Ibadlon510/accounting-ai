@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateJournalEntryPanel } from "@/components/modals/create-journal-entry-panel";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
-import { useOrgConfig } from "@/hooks/use-organization";
+import { useIsArchived, useOrgConfig } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 import type { JournalEntry } from "@/types/accounting";
 
 const statusColors: Record<string, string> = {
@@ -28,6 +29,7 @@ export default function JournalEntriesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const orgConfig = useOrgConfig();
+  const { isArchived } = useIsArchived();
 
   const loadEntries = useCallback(() => {
     fetch("/api/accounting/journal-entries", { cache: "no-store" })
@@ -96,7 +98,12 @@ export default function JournalEntriesPage() {
           />
         </div>
         <ImportExportButtons entity="journal-entries" entityLabel="Journal Entries" onImportComplete={loadEntries} />
-        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" />
           New Journal Entry
         </Button>

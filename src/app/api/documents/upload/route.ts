@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { documents, auditLogs, organizations } from "@/lib/db/schema";
+import { documents, auditLogs } from "@/lib/db/schema";
 import { uploadToTemp, isVaultConfigured } from "@/lib/storage/vault";
 import { eq } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -27,11 +28,8 @@ export async function POST(request: Request) {
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const [org] = await db.select({ subscriptionPlan: organizations.subscriptionPlan }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
-  if (org?.subscriptionPlan === "ARCHIVE") {
-    return NextResponse.json({ error: "Archive mode: read-only. Restore subscription to upload." }, { status: 403 });
-  }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   if (!isVaultConfigured()) {
     return NextResponse.json(

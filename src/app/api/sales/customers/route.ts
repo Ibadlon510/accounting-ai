@@ -3,10 +3,14 @@ import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
 import { customers, invoices } from "@/lib/db/schema";
 import { eq, sql, and, ne } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
   try {
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name.trim() : "";

@@ -5,6 +5,7 @@ import { journalEntries, journalLines, chartOfAccounts } from "@/lib/db/schema";
 import { eq, desc, count, inArray } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { requireOrgRole } from "@/lib/auth/require-role";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -105,6 +106,9 @@ type LineInput = { accountId: string; description?: string; debit: number; credi
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;

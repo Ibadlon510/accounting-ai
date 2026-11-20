@@ -5,6 +5,7 @@ import { invoices, invoiceLines, customers, paymentAllocations, payments, docume
 import { eq, sql, count, and } from "drizzle-orm";
 import { deriveInvoiceStatus } from "@/lib/accounting/document-status";
 import { requireOrgRole } from "@/lib/auth/require-role";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -145,6 +146,9 @@ type LineInput = { id?: string; productId?: string; description: string; quantit
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;

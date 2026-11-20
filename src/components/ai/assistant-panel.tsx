@@ -378,6 +378,7 @@ export function AssistantPanel() {
   }, []);
 
   const isFreePlan = subscriptionPlan === "FREE";
+  const isArchived = subscriptionPlan === "ARCHIVE";
 
   // FAB bubble: delayed entrance + message rotation
   useEffect(() => {
@@ -402,6 +403,10 @@ export function AssistantPanel() {
   }
 
   async function handleQuery(query: string) {
+    if (isArchived) {
+      setError("Assistant is unavailable in archive mode.");
+      return;
+    }
     setThinking(true);
     setResponse(null);
     setError(null);
@@ -668,7 +673,13 @@ export function AssistantPanel() {
 
       {/* Input bar (bottom) */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
-        <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
+        {isArchived ? (
+          <p className="rounded-xl bg-white/5 px-3.5 py-3 text-center text-[12px] text-white/60">
+            Assistant is read-only disabled while this workspace is archived. Renew in Settings → Billing.
+          </p>
+        ) : (
+          <AIInputBar onSubmit={handleQuery} onFileStateChange={setFileState} />
+        )}
       </div>
     </div>
 

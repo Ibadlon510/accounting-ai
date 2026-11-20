@@ -26,6 +26,7 @@ import { eq, and, lte, gte, count } from "drizzle-orm";
 import { moveToRetentionVault, isVaultConfigured } from "@/lib/storage/vault";
 import { auditLogs } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 type LineInput = { id?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type ExpenseLineInput = LineInput & { glAccountId: string };
@@ -39,6 +40,8 @@ export async function PATCH(
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   const { id: documentId } = await params;
   const [doc] = await db

@@ -3,6 +3,7 @@ import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 type PatchBody = {
   accountType?: "bank" | "credit_card";
@@ -21,6 +22,9 @@ export async function PATCH(
 ) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Account ID required" }, { status: 400 });

@@ -9,6 +9,7 @@ import { parseBankStatement, extractBankStatementFromImage } from "@/lib/banking
 import { auditLogs } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications/create";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 const BANK_STATEMENT_MIMES = ["text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
@@ -20,15 +21,14 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   const [org] = await db
-    .select({ tokenBalance: organizations.tokenBalance, subscriptionPlan: organizations.subscriptionPlan })
+    .select({ tokenBalance: organizations.tokenBalance })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
-  if (org?.subscriptionPlan === "ARCHIVE") {
-    return NextResponse.json({ error: "Archive mode: read-only. Restore subscription to process." }, { status: 403 });
-  }
 
   if (!isVaultConfigured()) {
     return NextResponse.json(

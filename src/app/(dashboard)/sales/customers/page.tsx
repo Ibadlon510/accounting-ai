@@ -9,11 +9,14 @@ import { AddCustomerPanel } from "@/components/modals/add-customer-modal";
 import { ViewCustomerPanel } from "@/components/overlays/view-customer-panel";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 type Customer = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; creditLimit: number; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 
 export default function CustomersPage() {
   usePageTitle("Customers");
+  const { isArchived } = useIsArchived();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -53,7 +56,12 @@ export default function CustomersPage() {
           <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
         <ImportExportButtons entity="customers" entityLabel="Customers" onImportComplete={loadCustomers} />
-        <Button onClick={() => setAddOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <Button
+          onClick={() => setAddOpen(true)}
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" /> Add Customer
         </Button>
       </div>
