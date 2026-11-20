@@ -5,6 +5,11 @@ import { invoices, invoiceLines, customers, paymentAllocations, payments, docume
 import { eq, sql, count, and } from "drizzle-orm";
 import { deriveInvoiceStatus } from "@/lib/accounting/document-status";
 import { requireOrgRole } from "@/lib/auth/require-role";
+import {
+  MissingExchangeRateError,
+  normalizeCurrency,
+  resolveExchangeRate,
+} from "@/lib/accounting/exchange-rates";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -149,7 +154,7 @@ export async function POST(request: Request) {
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;
 
-  let body: { customerId: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string };
+  let body: { customerId: string; issueDate: string; dueDate: string; currency?: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string };
   try {
     body = await request.json();
   } catch {
@@ -165,10 +170,31 @@ export async function POST(request: Request) {
 
   try {
     const [org] = await db
-      .select({ isVatRegistered: organizations.isVatRegistered, defaultTaxCodeId: organizations.defaultTaxCodeId })
+      .select({
+        isVatRegistered: organizations.isVatRegistered,
+        defaultTaxCodeId: organizations.defaultTaxCodeId,
+        currency: organizations.currency,
+      })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
+
+    const currency = normalizeCurrency(body.currency ?? org?.currency);
+    let exchangeRate = 1;
+    try {
+      const fx = await resolveExchangeRate({
+        organizationId: orgId,
+        fromCurrency: currency,
+        asOfDate: issueDate,
+        baseCurrency: org?.currency,
+      });
+      exchangeRate = fx.rate;
+    } catch (e) {
+      if (e instanceof MissingExchangeRateError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
 
     let defaultTaxCode = "SR";
     if (org?.defaultTaxCodeId) {
@@ -189,6 +215,8 @@ export async function POST(request: Request) {
         issueDate,
         dueDate,
         status: "draft",
+        currency,
+        exchangeRate: String(exchangeRate),
         subtotal: String(Number(subtotal) || 0),
         taxAmount: String(org?.isVatRegistered ? (Number(taxAmount) || 0) : 0),
         total: String(totalNum),
@@ -198,7 +226,7 @@ export async function POST(request: Request) {
         terms: body.terms?.trim() || null,
         paymentInfo: body.paymentInfo?.trim() || null,
       })
-      .returning({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, customerId: invoices.customerId, issueDate: invoices.issueDate, dueDate: invoices.dueDate, status: invoices.status, subtotal: invoices.subtotal, taxAmount: invoices.taxAmount, total: invoices.total, amountPaid: invoices.amountPaid, amountDue: invoices.amountDue });
+      .returning({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, customerId: invoices.customerId, issueDate: invoices.issueDate, dueDate: invoices.dueDate, status: invoices.status, currency: invoices.currency, exchangeRate: invoices.exchangeRate, subtotal: invoices.subtotal, taxAmount: invoices.taxAmount, total: invoices.total, amountPaid: invoices.amountPaid, amountDue: invoices.amountDue });
 
     if (!inv) return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 });
 
@@ -242,6 +270,8 @@ export async function POST(request: Request) {
         issueDate: inv.issueDate,
         dueDate: inv.dueDate,
         status: inv.status,
+        currency: inv.currency,
+        exchangeRate: parseFloat(inv.exchangeRate ?? "1"),
         subtotal: parseFloat(inv.subtotal ?? "0"),
         taxAmount: parseFloat(inv.taxAmount ?? "0"),
         total: parseFloat(inv.total ?? "0"),

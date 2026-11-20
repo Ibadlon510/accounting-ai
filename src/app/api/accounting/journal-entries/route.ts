@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
-import { journalEntries, journalLines, chartOfAccounts } from "@/lib/db/schema";
+import { journalEntries, journalLines, chartOfAccounts, organizations } from "@/lib/db/schema";
 import { eq, desc, count, inArray } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { requireOrgRole } from "@/lib/auth/require-role";
+import {
+  MissingExchangeRateError,
+  normalizeCurrency,
+  resolveExchangeRate,
+  toBaseAmount,
+} from "@/lib/accounting/exchange-rates";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -109,7 +115,7 @@ export async function POST(request: Request) {
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;
 
-  let body: { entryDate: string; description: string; reference?: string; lines: LineInput[] };
+  let body: { entryDate: string; description: string; reference?: string; currency?: string; lines: LineInput[] };
   try {
     body = await request.json();
   } catch {
@@ -136,6 +142,29 @@ export async function POST(request: Request) {
   if (Math.abs(totalDebit - totalCredit) > 0.01) return NextResponse.json({ error: "Entry must balance (total debits = total credits)" }, { status: 400 });
 
   try {
+    const [org] = await db
+      .select({ currency: organizations.currency })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const currency = normalizeCurrency(body.currency ?? org?.currency);
+    let exchangeRate = 1;
+    try {
+      const fx = await resolveExchangeRate({
+        organizationId: orgId,
+        fromCurrency: currency,
+        asOfDate: entryDate,
+        baseCurrency: org?.currency,
+      });
+      exchangeRate = fx.rate;
+    } catch (e) {
+      if (e instanceof MissingExchangeRateError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
+
     const { je, acctMap } = await db.transaction(async (tx) => {
       const periodId = await resolveOrCreatePeriod(orgId, entryDate, tx);
       if (!periodId) throw new Error("Could not resolve accounting period for date");
@@ -155,12 +184,13 @@ export async function POST(request: Request) {
           reference: reference?.trim() || null,
           sourceType: "manual",
           status: "posted",
-          currency: "AED",
+          currency,
+          exchangeRate: String(exchangeRate),
           totalDebit: String(totalDebit),
           totalCredit: String(totalCredit),
           postedAt: new Date(),
         })
-        .returning({ id: journalEntries.id, entryNumber: journalEntries.entryNumber, entryDate: journalEntries.entryDate, description: journalEntries.description, reference: journalEntries.reference, status: journalEntries.status, totalDebit: journalEntries.totalDebit, totalCredit: journalEntries.totalCredit, postedAt: journalEntries.postedAt, createdAt: journalEntries.createdAt });
+        .returning({ id: journalEntries.id, entryNumber: journalEntries.entryNumber, entryDate: journalEntries.entryDate, description: journalEntries.description, reference: journalEntries.reference, status: journalEntries.status, currency: journalEntries.currency, exchangeRate: journalEntries.exchangeRate, totalDebit: journalEntries.totalDebit, totalCredit: journalEntries.totalCredit, postedAt: journalEntries.postedAt, createdAt: journalEntries.createdAt });
 
       if (!entry) throw new Error("Failed to create journal entry");
 
@@ -176,9 +206,10 @@ export async function POST(request: Request) {
           description: l.description || null,
           debit: String(l.debit),
           credit: String(l.credit),
-          currency: "AED",
-          baseCurrencyDebit: String(l.debit),
-          baseCurrencyCredit: String(l.credit),
+          currency,
+          exchangeRate: String(exchangeRate),
+          baseCurrencyDebit: String(toBaseAmount(l.debit, exchangeRate)),
+          baseCurrencyCredit: String(toBaseAmount(l.credit, exchangeRate)),
           lineOrder: i + 1,
         });
       }
@@ -209,6 +240,8 @@ export async function POST(request: Request) {
         reference: je.reference ?? undefined,
         status: je.status,
         sourceType: "manual",
+        currency: je.currency,
+        exchangeRate: parseFloat(je.exchangeRate ?? "1"),
         totalDebit: parseFloat(je.totalDebit ?? "0"),
         totalCredit: parseFloat(je.totalCredit ?? "0"),
         postedAt: je.postedAt?.toISOString(),

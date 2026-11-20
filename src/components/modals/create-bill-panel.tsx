@@ -21,10 +21,12 @@ import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AttachDocumentZone } from "@/components/workspace/attach-document-zone";
 import { ProductSelect, getProductPrice } from "@/components/documents/product-select";
 import { ContactSelect } from "@/components/documents/contact-select";
 import { GLCombobox, type GLAccount } from "@/components/ai/gl-combobox";
+import { COMMON_CURRENCIES } from "@/lib/accounting/currencies";
 type Supplier = { id: string; name: string; email: string; phone: string; isActive: boolean };
 type BillLine = { id: string; productId: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number; accountId: string; taxCodeId: string };
 type TaxCode = { id: string; code: string; name: string; rate: number; type: string; isActive: boolean };
@@ -41,6 +43,7 @@ interface CreateBillPanelProps {
     billNumber: string;
     issueDate: string;
     dueDate: string;
+    currency: string;
     lines: BillLine[];
     subtotal: number;
     taxAmount: number;
@@ -72,6 +75,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
   const [accounts, setAccounts] = useState<GLAccount[]>([]);
   const [taxCodes, setTaxCodes] = useState<TaxCode[]>([]);
   const [orgConfig, setOrgConfig] = useState<OrgConfig>({ isVatRegistered: true, taxLabel: "VAT", currency: "AED" });
+  const [currency, setCurrency] = useState("AED");
 
   useEffect(() => {
     if (!open) return;
@@ -93,7 +97,11 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
     fetch("/api/org/current")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setOrgConfig({ isVatRegistered: d.isVatRegistered ?? true, taxLabel: d.taxLabel ?? "VAT", currency: d.currency ?? "AED" });
+        if (d) {
+          const base = d.currency ?? "AED";
+          setOrgConfig({ isVatRegistered: d.isVatRegistered ?? true, taxLabel: d.taxLabel ?? "VAT", currency: base });
+          setCurrency(base);
+        }
       })
       .catch(() => {});
     fetch("/api/org/tax-codes")
@@ -150,6 +158,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
   function reset() {
     setSupplierId(""); setBillNumber(""); setLines([emptyLine(defaultTaxCode?.rate ?? 0, defaultTaxCode?.id ?? "")]); setAutoPost(true);
     setNotes(""); setTerms(""); setPaymentInfo(""); setShowAdditional(false);
+    setCurrency(orgConfig.currency);
     setIssueDate(new Date().toISOString().slice(0, 10));
     const d = new Date(); d.setDate(d.getDate() + 30);
     setDueDate(d.toISOString().slice(0, 10));
@@ -163,7 +172,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
     const supplier = suppliers.find((s) => s.id === supplierId);
     try {
       await onCreate({
-        supplierId, supplierName: supplier?.name ?? "", billNumber, issueDate, dueDate, lines,
+        supplierId, supplierName: supplier?.name ?? "", billNumber, issueDate, dueDate, currency, lines,
         subtotal: Math.round(subtotal * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
@@ -171,7 +180,7 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
         terms: terms.trim() || undefined,
         paymentInfo: paymentInfo.trim() || undefined,
       });
-      showSuccess("Bill recorded", `Bill ${billNumber} for ${orgConfig.currency} ${formatNumber(total)} has been recorded.`);
+      showSuccess("Bill recorded", `Bill ${billNumber} for ${currency} ${formatNumber(total)} has been recorded.`);
       reset();
       onOpenChange(false);
     } catch {
@@ -302,11 +311,11 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
 
             <div className="mt-4 flex justify-end">
               <div className="w-64 space-y-1.5 text-[13px]">
-                <div className="flex justify-between text-text-secondary"><span>Subtotal</span><span className="font-mono font-medium text-text-primary">{orgConfig.currency} {formatNumber(subtotal)}</span></div>
+                <div className="flex justify-between text-text-secondary"><span>Subtotal</span><span className="font-mono font-medium text-text-primary">{currency} {formatNumber(subtotal)}</span></div>
                 {orgConfig.isVatRegistered && (
-                  <div className="flex justify-between text-text-secondary"><span>{orgConfig.taxLabel}</span><span className="font-mono font-medium text-text-primary">{orgConfig.currency} {formatNumber(taxAmount)}</span></div>
+                  <div className="flex justify-between text-text-secondary"><span>{orgConfig.taxLabel}</span><span className="font-mono font-medium text-text-primary">{currency} {formatNumber(taxAmount)}</span></div>
                 )}
-                <div className="flex justify-between border-t border-border-subtle pt-1.5 text-[15px] font-bold text-text-primary"><span>Total</span><span className="font-mono">{orgConfig.currency} {formatNumber(total)}</span></div>
+                <div className="flex justify-between border-t border-border-subtle pt-1.5 text-[15px] font-bold text-text-primary"><span>Total</span><span className="font-mono">{currency} {formatNumber(total)}</span></div>
               </div>
             </div>
 
@@ -371,7 +380,21 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
               />
             </EntityPanelSidebarSection>
             <EntityPanelSidebarSection title="Currency">
-              <p className="text-[14px] font-medium text-text-primary">{orgConfig.currency}</p>
+              <SearchableSelect
+                value={currency}
+                onChange={setCurrency}
+                options={COMMON_CURRENCIES.map((c) => ({
+                  value: c.code,
+                  label: `${c.code} — ${c.name}`,
+                }))}
+                placeholder={orgConfig.currency}
+                searchPlaceholder="Search currency..."
+              />
+              {currency !== orgConfig.currency && (
+                <p className="mt-2 text-[11px] text-text-meta">
+                  FX rate for {currency} → {orgConfig.currency} is applied on save. Set rates in Settings if missing.
+                </p>
+              )}
             </EntityPanelSidebarSection>
             <EntityPanelSidebarSection title="Posting">
               <div className="flex items-start gap-2">

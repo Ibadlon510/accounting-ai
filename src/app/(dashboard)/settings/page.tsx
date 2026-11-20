@@ -20,6 +20,7 @@ import {
   Mail,
   MailCheck,
   ArrowLeftRight,
+  CircleDollarSign,
   Plus,
   Pencil,
   Check,
@@ -36,6 +37,7 @@ import { TemplateSettings } from "@/components/settings/template-settings";
 import { EmailTemplateSettings } from "@/components/settings/email-template-settings";
 import { EmailHistorySettings } from "@/components/settings/email-history-settings";
 import { DocumentDefaultsSettings } from "@/components/settings/document-defaults-settings";
+import { ExchangeRateSettings } from "@/components/settings/exchange-rate-settings";
 import { ImportExportButtons } from "@/components/import-export/import-export-buttons";
 
 const tabs = [
@@ -47,6 +49,7 @@ const tabs = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "document-defaults", label: "Document Defaults", icon: FileText },
+  { id: "exchange-rates", label: "Exchange Rates", icon: CircleDollarSign },
   { id: "pdf-templates", label: "PDF Templates", icon: FileCode2 },
   { id: "email-templates", label: "Email Templates", icon: Mail },
   { id: "email-history", label: "Email History", icon: MailCheck },
@@ -106,11 +109,12 @@ export default function SettingsPage() {
           {activeTab === "notifications" && <NotificationSettings />}
           {activeTab === "appearance" && <AppearanceSettings />}
           {activeTab === "document-defaults" && <DocumentDefaultsSettings />}
+          {activeTab === "exchange-rates" && <ExchangeRateSettings />}
           {activeTab === "pdf-templates" && <TemplateSettings />}
           {activeTab === "email-templates" && <EmailTemplateSettings />}
           {activeTab === "email-history" && <EmailHistorySettings />}
           {activeTab === "import-export" && <DataImportExportSettings />}
-          {!["organization","database","billing","team","security","notifications","appearance","document-defaults","pdf-templates","email-templates","email-history","import-export"].includes(activeTab) && (
+          {!["organization","database","billing","team","security","notifications","appearance","document-defaults","exchange-rates","pdf-templates","email-templates","email-history","import-export"].includes(activeTab) && (
             <div className="dashboard-card">
               <h2 className="text-[18px] font-semibold text-text-primary">
                 {tabs.find((t) => t.id === activeTab)?.label}

@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import { toBaseAmount } from "@/lib/accounting/exchange-rates";
 
 async function createBillJournalEntry(orgId: string, billId: string) {
   const [bill] = await db
@@ -24,6 +25,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       taxAmount: bills.taxAmount,
       total: bills.total,
       currency: bills.currency,
+      exchangeRate: bills.exchangeRate,
       journalEntryId: bills.journalEntryId,
     })
     .from(bills)
@@ -73,6 +75,9 @@ async function createBillJournalEntry(orgId: string, billId: string) {
   const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
   const entryNumber = `JE-${ym}-${seq}`;
 
+  const rate = parseFloat(bill.exchangeRate ?? "1") || 1;
+  const cur = bill.currency ?? "AED";
+
   const [je] = await db
     .insert(journalEntries)
     .values({
@@ -85,7 +90,8 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       sourceType: "bill",
       sourceId: bill.id,
       status: "posted",
-      currency: bill.currency ?? "AED",
+      currency: cur,
+      exchangeRate: String(rate),
       totalDebit: String(total),
       totalCredit: String(total),
       postedAt: new Date(),
@@ -95,7 +101,6 @@ async function createBillJournalEntry(orgId: string, billId: string) {
   if (!je) return;
 
   const jl: (typeof journalLines.$inferInsert)[] = [];
-  const cur = bill.currency ?? "AED";
   let lineOrder = 1;
 
   for (const l of lines) {
@@ -111,7 +116,8 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         debit: String(net),
         credit: "0",
         currency: cur,
-        baseCurrencyDebit: String(net),
+        exchangeRate: String(rate),
+        baseCurrencyDebit: String(toBaseAmount(net, rate)),
         baseCurrencyCredit: "0",
         lineOrder: lineOrder++,
       });
@@ -125,7 +131,8 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         debit: String(tax),
         credit: "0",
         currency: cur,
-        baseCurrencyDebit: String(tax),
+        exchangeRate: String(rate),
+        baseCurrencyDebit: String(toBaseAmount(tax, rate)),
         baseCurrencyCredit: "0",
         taxCode: l.taxCode || "SR",
         taxAmount: String(tax),
@@ -143,8 +150,9 @@ async function createBillJournalEntry(orgId: string, billId: string) {
     debit: "0",
     credit: String(total),
     currency: cur,
+    exchangeRate: String(rate),
     baseCurrencyDebit: "0",
-    baseCurrencyCredit: String(total),
+    baseCurrencyCredit: String(toBaseAmount(total, rate)),
     lineOrder: lineOrder++,
   });
 
