@@ -7,6 +7,7 @@ import { PLANS, STRIPE_PRICES } from "@/lib/billing/plans";
 import type Stripe from "stripe";
 import { createNotification } from "@/lib/notifications/create";
 import { sendSubscriptionConfirmedEmail, sendSubscriptionCanceledEmail } from "@/lib/email/subscription";
+import { handleInvoicePaymentCheckoutCompleted } from "@/lib/payment-links/handle-checkout-completed";
 
 // Disable Next.js body parsing — Stripe needs the raw body for signature verification
 export const runtime = "nodejs";
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Invoice payment links (ACC-16) — settle before SaaS billing branch
+        if (session.metadata?.purpose === "invoice_payment") {
+          await handleInvoicePaymentCheckoutCompleted(session, event.id);
+          break;
+        }
+
         const orgId = session.metadata?.orgId;
         const priceKey = session.metadata?.priceKey;
 
