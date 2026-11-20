@@ -15,6 +15,7 @@ import {
 import { formatNumber } from "@/lib/accounting/engine";
 type Customer = { id: string; name: string; email: string; phone: string; taxNumber: string; city: string; country: string; currency: string; creditLimit: number; paymentTermsDays: number; isActive: boolean; outstandingBalance: number };
 import { Building2, Mail, Phone, MapPin, Globe, Receipt, CreditCard } from "lucide-react";
+import { CustomerPortalLinks } from "@/components/client-portal/customer-portal-links";
 
 interface ViewCustomerPanelProps {
   open: boolean;
@@ -98,6 +99,8 @@ export function ViewCustomerPanel({ open, onOpenChange, customer }: ViewCustomer
                 value={`AED ${formatNumber(customer.outstandingBalance)}`}
               />
             </EntityPanelFieldGroup>
+
+            <CustomerPortalLinks customerId={customer.id} />
           </EntityPanelMain>
         </EntityPanelBody>
 

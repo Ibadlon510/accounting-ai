@@ -1037,3 +1037,28 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Customer Portal Access Tokens ──────────────────────────
+// Raw token is never stored — only SHA-256 hash. Public URL carries the raw secret.
+export const customerPortalTokens = pgTable("customer_portal_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id")
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  tokenPrefix: varchar("token_prefix", { length: 8 }).notNull(),
+  label: varchar("label", { length: 120 }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("customer_portal_tokens_hash_uidx").on(t.tokenHash),
+  index("customer_portal_tokens_org_customer_idx").on(t.organizationId, t.customerId),
+  index("customer_portal_tokens_org_idx").on(t.organizationId),
+]);
