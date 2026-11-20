@@ -253,6 +253,7 @@ export const journalLines = pgTable("journal_lines", {
   baseCurrencyCredit: numeric("base_currency_credit", { precision: 18, scale: 2 }).notNull().default("0"),
   taxCode: varchar("tax_code", { length: 20 }),
   taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }),
+  projectId: uuid("project_id"), // FK to projects enforced after table exists
   lineOrder: integer("line_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -260,6 +261,7 @@ export const journalLines = pgTable("journal_lines", {
 }, (t) => [
   index("journal_lines_entry_idx").on(t.journalEntryId),
   index("journal_lines_org_account_idx").on(t.organizationId, t.accountId),
+  index("journal_lines_org_project_idx").on(t.organizationId, t.projectId),
 ]);
 
 // ─── Currencies ─────────────────────────────────────────────
@@ -357,12 +359,14 @@ export const invoices = pgTable("invoices", {
   paymentInfo: text("payment_info"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
+  projectId: uuid("project_id"), // FK to projects enforced after table exists
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("invoices_org_status_idx").on(t.organizationId, t.status),
   index("invoices_org_customer_idx").on(t.organizationId, t.customerId),
+  index("invoices_org_project_idx").on(t.organizationId, t.projectId),
 ]);
 
 // ─── Invoice Lines ──────────────────────────────────────────
@@ -410,12 +414,14 @@ export const bills = pgTable("bills", {
   paymentInfo: text("payment_info"),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   journalEntryId: uuid("journal_entry_id"),
+  projectId: uuid("project_id"), // FK to projects enforced after table exists
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("bills_org_status_idx").on(t.organizationId, t.status),
   index("bills_org_supplier_idx").on(t.organizationId, t.supplierId),
+  index("bills_org_project_idx").on(t.organizationId, t.projectId),
 ]);
 
 // ─── Bill Lines ─────────────────────────────────────────────
@@ -1037,3 +1043,25 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Projects / Cost Centres ────────────────────────────────
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 30 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  kind: varchar("kind", { length: 20 }).notNull().default("project"), // project | cost_centre
+  status: varchar("status", { length: 20 }).notNull().default("active"), // active | completed | archived
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  description: text("description"),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("projects_org_status_idx").on(t.organizationId, t.status),
+  index("projects_org_kind_idx").on(t.organizationId, t.kind),
+]);
