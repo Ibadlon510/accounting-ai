@@ -18,7 +18,8 @@ export default auth(async function middleware(request) {
     path.startsWith("/forgot-password") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/accept-invite") ||
-    path.startsWith("/auth");
+    path.startsWith("/auth") ||
+    path.startsWith("/pay");
 
   const isAuthPage =
     path.startsWith("/login") ||

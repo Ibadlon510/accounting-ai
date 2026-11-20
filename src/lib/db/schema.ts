@@ -1037,3 +1037,43 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Invoice Payment Links (ACC-16) ─────────────────────────
+/** pending|open|paid|expired|cancelled|failed — settlement posts immutable receipt JE */
+export const invoicePaymentLinks = pgTable("invoice_payment_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id")
+    .notNull()
+    .references(() => customers.id),
+  bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, {
+    onDelete: "set null",
+  }),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  provider: varchar("provider", { length: 20 }).notNull().default("stripe"), // stripe | stub
+  checkoutUrl: text("checkout_url"),
+  stubTokenHash: varchar("stub_token_hash", { length: 64 }),
+  stubTokenPrefix: varchar("stub_token_prefix", { length: 8 }),
+  stripeCheckoutSessionId: varchar("stripe_checkout_session_id", { length: 255 }),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
+  /** Stripe event id / stub event key — unique for webhook idempotency */
+  providerEventId: varchar("provider_event_id", { length: 255 }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "set null" }),
+  journalEntryId: uuid("journal_entry_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("invoice_payment_links_org_idx").on(t.organizationId),
+  index("invoice_payment_links_org_invoice_idx").on(t.organizationId, t.invoiceId),
+  index("invoice_payment_links_org_status_idx").on(t.organizationId, t.status),
+]);

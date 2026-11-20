@@ -16,12 +16,13 @@ import {
 import { PaymentReceiptSection } from "@/components/overlays/payment-receipt-section";
 import type { ReceiptItem } from "@/components/overlays/payment-receipt-section";
 import { formatNumber, formatDate } from "@/lib/accounting/engine";
-import { FileText, Calendar, User, DollarSign, CreditCard, Send, Mail, ReceiptText, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Calendar, User, DollarSign, CreditCard, Send, Mail, ReceiptText, ChevronDown, ChevronRight, Link2, Loader2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExportPdfButton } from "@/components/pdf/export-pdf-button";
 import { SendDocumentModal } from "@/components/email/send-document-modal";
 import { ApplyCreditsPanel } from "@/components/modals/apply-credits-panel";
 import { useOrgConfig } from "@/hooks/use-organization";
+import { showError, showSuccess } from "@/lib/utils/toast-helpers";
 
 type InvoiceLine = { id: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type AppliedCredit = { id: string; creditNoteNumber: string; date: string; amount: number };
@@ -48,6 +49,67 @@ interface ViewInvoicePanelProps {
 
 export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment, onViewPaymentReceipt, onConfirm, confirming }: ViewInvoicePanelProps) {
   const [showEmailModal, setShowEmailModal] = React.useState(false);
+  const [creatingLink, setCreatingLink] = React.useState(false);
+  const [linkStatus, setLinkStatus] = React.useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!open || !invoice?.id) {
+      setLinkStatus(null);
+      setLinkUrl(null);
+      return;
+    }
+    fetch(`/api/payment-links?invoiceId=${invoice.id}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { links: [] }))
+      .then((d) => {
+        const links = (d.links ?? []) as {
+          status: string;
+          checkoutUrl: string | null;
+        }[];
+        const active =
+          links.find((l) => l.status === "open" || l.status === "pending") ??
+          links.find((l) => l.status === "paid") ??
+          links[0];
+        setLinkStatus(active?.status ?? null);
+        setLinkUrl(active?.checkoutUrl ?? null);
+      })
+      .catch(() => {
+        setLinkStatus(null);
+        setLinkUrl(null);
+      });
+  }, [open, invoice?.id]);
+
+  async function handleCreatePaymentLink() {
+    if (!invoice?.id) return;
+    setCreatingLink(true);
+    try {
+      const res = await fetch("/api/payment-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: invoice.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showError(json.error ?? "Failed to create payment link");
+        return;
+      }
+      const url = json.link?.checkoutUrl as string | undefined;
+      setLinkUrl(url ?? null);
+      setLinkStatus(json.link?.status ?? "open");
+      if (url) {
+        try {
+          await navigator.clipboard.writeText(url);
+          showSuccess("Payment link created", "Link copied to clipboard.");
+        } catch {
+          showSuccess("Payment link created");
+        }
+      } else {
+        showSuccess("Payment link created");
+      }
+    } finally {
+      setCreatingLink(false);
+    }
+  }
   const [showCreditsPanel, setShowCreditsPanel] = React.useState(false);
   const [creditsExpanded, setCreditsExpanded] = React.useState(false);
   const { currency, taxLabel } = useOrgConfig();
@@ -246,6 +308,41 @@ export function ViewInvoicePanel({ open, onOpenChange, invoice, onRecordPayment,
               className="mr-auto gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
             >
               <ReceiptText className="h-3.5 w-3.5" /> Apply Credit
+            </Button>
+          )}
+          {invoice.amountDue > 0 && invoice.status !== "draft" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={creatingLink}
+              onClick={handleCreatePaymentLink}
+              className="mr-auto gap-1.5 rounded-xl border-border-subtle px-4 text-[12px]"
+              title={linkStatus ? `Settlement: ${linkStatus}` : "Create payment link"}
+            >
+              {creatingLink ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Link2 className="h-3.5 w-3.5" />
+              )}
+              Payment link
+              {linkStatus ? ` · ${linkStatus}` : ""}
+            </Button>
+          )}
+          {linkUrl && invoice.amountDue > 0 && invoice.status !== "draft" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-xl border-border-subtle px-3 text-[12px]"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(linkUrl);
+                  showSuccess("Link copied");
+                } catch {
+                  showError("Could not copy link");
+                }
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy
             </Button>
           )}
           {onRecordPayment && invoice.amountDue > 0 && invoice.status !== "draft" && (

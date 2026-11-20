@@ -26,6 +26,7 @@ import {
   ArrowRight,
   Zap,
 } from "lucide-react";
+import { ComingSoonGrid } from "@/components/modules/coming-soon-grid";
 
 interface DashboardStats {
   sales: { totalRevenue: number; totalPaid: number; totalOutstanding: number; overdueAmount: number; invoiceCount: number; customerCount: number };
@@ -360,6 +361,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <ComingSoonGrid />
       </>}
     </>
   );
