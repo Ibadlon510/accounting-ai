@@ -54,7 +54,7 @@ export default function JournalEntriesPage() {
     loadEntries();
   }, [loadEntries]);
 
-  async function handleCreate(data: { entryDate: string; description: string; reference: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
+  async function handleCreate(data: { entryDate: string; description: string; reference: string; currency: string; lines: { id: string; accountId: string; description: string; debit: number; credit: number }[]; totalDebit: number; totalCredit: number }) {
     const res = await fetch("/api/accounting/journal-entries", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,6 +62,7 @@ export default function JournalEntriesPage() {
         entryDate: data.entryDate,
         description: data.description,
         reference: data.reference || undefined,
+        currency: data.currency,
         lines: data.lines.map((l) => ({ accountId: l.accountId, description: l.description, debit: l.debit, credit: l.credit })),
       }),
     });

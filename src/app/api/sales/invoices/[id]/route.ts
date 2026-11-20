@@ -14,6 +14,7 @@ import {
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { sendDocumentEmail } from "@/lib/email/document-email";
+import { toBaseAmount } from "@/lib/accounting/exchange-rates";
 
 async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [inv] = await db
@@ -26,6 +27,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       taxAmount: invoices.taxAmount,
       total: invoices.total,
       currency: invoices.currency,
+      exchangeRate: invoices.exchangeRate,
       journalEntryId: invoices.journalEntryId,
     })
     .from(invoices)
@@ -68,6 +70,9 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
   const entryNumber = `JE-${ym}-${seq}`;
 
+  const rate = parseFloat(inv.exchangeRate ?? "1") || 1;
+  const cur = inv.currency ?? "AED";
+
   const [je] = await db
     .insert(journalEntries)
     .values({
@@ -80,7 +85,8 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       sourceType: "invoice",
       sourceId: inv.id,
       status: "posted",
-      currency: inv.currency ?? "AED",
+      currency: cur,
+      exchangeRate: String(rate),
       totalDebit: String(total),
       totalCredit: String(total),
       postedAt: new Date(),
@@ -90,7 +96,6 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   if (!je) return;
 
   const jl: (typeof journalLines.$inferInsert)[] = [];
-  const cur = inv.currency ?? "AED";
 
   jl.push({
     journalEntryId: je.id,
@@ -100,7 +105,8 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     debit: String(total),
     credit: "0",
     currency: cur,
-    baseCurrencyDebit: String(total),
+    exchangeRate: String(rate),
+    baseCurrencyDebit: String(toBaseAmount(total, rate)),
     baseCurrencyCredit: "0",
     lineOrder: 1,
   });
@@ -112,8 +118,9 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     debit: "0",
     credit: String(subtotal),
     currency: cur,
+    exchangeRate: String(rate),
     baseCurrencyDebit: "0",
-    baseCurrencyCredit: String(subtotal),
+    baseCurrencyCredit: String(toBaseAmount(subtotal, rate)),
     lineOrder: 2,
   });
   if (org?.isVatRegistered && taxAmount > 0 && vatAccount) {
@@ -125,8 +132,9 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       debit: "0",
       credit: String(taxAmount),
       currency: cur,
+      exchangeRate: String(rate),
       baseCurrencyDebit: "0",
-      baseCurrencyCredit: String(taxAmount),
+      baseCurrencyCredit: String(toBaseAmount(taxAmount, rate)),
       taxCode: primaryTaxCode,
       taxAmount: String(taxAmount),
       lineOrder: 3,

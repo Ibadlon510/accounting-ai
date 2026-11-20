@@ -62,7 +62,7 @@ export default function InvoicesPage() {
     });
   }, []);
 
-  async function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number }) {
+  async function handleCreateInvoice(data: { customerId: string; customerName: string; issueDate: string; dueDate: string; currency: string; lines: InvoiceLine[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string }) {
     const res = await fetch("/api/sales/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -70,10 +70,14 @@ export default function InvoicesPage() {
         customerId: data.customerId,
         issueDate: data.issueDate,
         dueDate: data.dueDate,
+        currency: data.currency,
         lines: data.lines.map((l) => ({ productId: l.productId, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, taxRate: l.taxRate, taxAmount: l.taxAmount })),
         subtotal: data.subtotal,
         taxAmount: data.taxAmount,
         total: data.total,
+        notes: data.notes,
+        terms: data.terms,
+        paymentInfo: data.paymentInfo,
       }),
     });
     const json = await res.json();

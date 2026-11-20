@@ -21,6 +21,8 @@ import { showSuccess, showError } from "@/lib/utils/toast-helpers";
 import { formatNumber, validateJournalEntry, calculateLineTotals } from "@/lib/accounting/engine";
 import { Plus, Trash2, Info, CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 import { StyledSelect } from "@/components/ui/styled-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { COMMON_CURRENCIES } from "@/lib/accounting/currencies";
 
 interface JournalLine {
   id: string;
@@ -39,6 +41,7 @@ interface CreateJournalEntryPanelProps {
     entryDate: string;
     description: string;
     reference: string;
+    currency: string;
     lines: JournalLine[];
     totalDebit: number;
     totalCredit: number;
@@ -57,6 +60,8 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [smartEntryInput, setSmartEntryInput] = useState("");
   const [smartEntryLoading, setSmartEntryLoading] = useState(false);
+  const [baseCurrency, setBaseCurrency] = useState("AED");
+  const [currency, setCurrency] = useState("AED");
 
   useEffect(() => {
     if (open) {
@@ -67,6 +72,14 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
           setAccounts(list.filter((a) => a.id && a.code));
         })
         .catch(() => setAccounts([]));
+      fetch("/api/org/current", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          const base = d?.currency ?? "AED";
+          setBaseCurrency(base);
+          setCurrency(base);
+        })
+        .catch(() => {});
     }
   }, [open]);
 
@@ -86,6 +99,7 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
     setDescription(""); setReference("");
     setLines([emptyLine(), emptyLine()]);
     setSmartEntryInput("");
+    setCurrency(baseCurrency);
   }
 
   async function handleSmartEntry() {
@@ -146,11 +160,11 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
 
     try {
       await onCreate({
-        entryDate, description, reference, lines,
+        entryDate, description, reference, currency, lines,
         totalDebit: totals.totalDebit,
         totalCredit: totals.totalCredit,
       });
-      showSuccess("Journal entry created", `Entry for AED ${formatNumber(totals.totalDebit)} has been posted.`);
+      showSuccess("Journal entry created", `Entry for ${currency} ${formatNumber(totals.totalDebit)} has been posted.`);
       reset();
       onOpenChange(false);
     } catch {
@@ -216,8 +230,8 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
               <div className="grid grid-cols-12 gap-2 bg-muted/30 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-meta">
                 <div className="col-span-4">Account</div>
                 <div className="col-span-3">Description</div>
-                <div className="col-span-2 text-right">Debit (AED)</div>
-                <div className="col-span-2 text-right">Credit (AED)</div>
+                <div className="col-span-2 text-right">Debit ({currency})</div>
+                <div className="col-span-2 text-right">Credit ({currency})</div>
                 <div className="col-span-1"></div>
               </div>
               {lines.map((line, i) => (
@@ -269,11 +283,11 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
             <div className="mt-4 flex items-center justify-between">
               <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold ${totals.isBalanced ? "bg-success/10 text-success" : "bg-error/10 text-error"}`}>
                 {totals.isBalanced ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                {totals.isBalanced ? "Entry is balanced" : `Out of balance by AED ${formatNumber(Math.abs(totals.totalDebit - totals.totalCredit))}`}
+                {totals.isBalanced ? "Entry is balanced" : `Out of balance by ${currency} ${formatNumber(Math.abs(totals.totalDebit - totals.totalCredit))}`}
               </div>
               <div className="flex gap-6 text-[13px]">
-                <div className="text-text-secondary">Total Debits: <span className="font-mono font-semibold text-text-primary">AED {formatNumber(totals.totalDebit)}</span></div>
-                <div className="text-text-secondary">Total Credits: <span className="font-mono font-semibold text-text-primary">AED {formatNumber(totals.totalCredit)}</span></div>
+                <div className="text-text-secondary">Total Debits: <span className="font-mono font-semibold text-text-primary">{currency} {formatNumber(totals.totalDebit)}</span></div>
+                <div className="text-text-secondary">Total Credits: <span className="font-mono font-semibold text-text-primary">{currency} {formatNumber(totals.totalCredit)}</span></div>
               </div>
             </div>
           </EntityPanelMain>
@@ -287,7 +301,21 @@ export function CreateJournalEntryPanel({ open, onOpenChange, onCreate }: Create
             </EntityPanelSidebarSection>
 
             <EntityPanelSidebarSection title="Currency">
-              <p className="text-[14px] font-medium text-text-primary">AED — UAE Dirham</p>
+              <SearchableSelect
+                value={currency}
+                onChange={setCurrency}
+                options={COMMON_CURRENCIES.map((c) => ({
+                  value: c.code,
+                  label: `${c.code} — ${c.name}`,
+                }))}
+                placeholder={baseCurrency}
+                searchPlaceholder="Search currency..."
+              />
+              {currency !== baseCurrency && (
+                <p className="mt-2 text-[11px] text-text-meta">
+                  Line amounts stay in {currency}; base ({baseCurrency}) amounts use the FX rate on save.
+                </p>
+              )}
             </EntityPanelSidebarSection>
 
             <EntityPanelSidebarSection title="Period">
