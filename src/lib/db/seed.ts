@@ -232,8 +232,10 @@ async function seedFoundation(organizationId: string): Promise<SeedContext> {
   if (existingTax.length === 0) {
     await db.insert(taxCodes).values([
       { organizationId, code: "VAT5", name: "VAT 5%", rate: "5", type: "output" },
-      { organizationId, code: "VAT5", name: "VAT 5% Input", rate: "5", type: "input" },
+      { organizationId, code: "VAT5I", name: "VAT 5% Input", rate: "5", type: "input" },
+      { organizationId, code: "ZERO", name: "Zero Rated", rate: "0", type: "zero" },
       { organizationId, code: "EXEMPT", name: "Exempt", rate: "0", type: "exempt" },
+      { organizationId, code: "RC", name: "Reverse Charge 5%", rate: "5", type: "reverse_charge" },
     ]);
   }
 

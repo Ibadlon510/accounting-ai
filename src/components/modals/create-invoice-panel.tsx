@@ -152,8 +152,17 @@ export function CreateInvoicePanel({ open, onOpenChange, customers, onCustomerCr
   function removeLine(index: number) { if (lines.length > 1) setLines((prev) => prev.filter((_, i) => i !== index)); }
 
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
-  const taxAmount = lines.reduce((s, l) => s + l.taxAmount, 0);
-  const total = subtotal + taxAmount;
+  // Sales reverse-charge: supplier does not charge VAT (buyer accounts for it).
+  const taxAmount = lines.reduce((s, l) => {
+    const tc = taxCodes.find((t) => t.id === l.taxCodeId);
+    if (tc?.type === "reverse_charge") return s;
+    return s + l.taxAmount;
+  }, 0);
+  const total = lines.reduce((s, l) => {
+    const tc = taxCodes.find((t) => t.id === l.taxCodeId);
+    if (tc?.type === "reverse_charge") return s + l.amount;
+    return s + l.amount + l.taxAmount;
+  }, 0);
 
   function reset() {
     setCustomerId(""); setLines([emptyLine(orgConfig.isVatRegistered ? (orgConfig.defaultTaxRate ?? 0) : 0, orgConfig.isVatRegistered ? (orgConfig.defaultTaxCodeId ?? "") : "")]); setAutoSendEmail(false);

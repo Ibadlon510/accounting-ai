@@ -59,6 +59,7 @@ type LineInput = {
   amount: number;
   taxRate: number;
   taxAmount: number;
+  taxCodeId?: string;
 };
 
 export async function POST(request: Request) {
@@ -118,10 +119,47 @@ export async function POST(request: Request) {
     if (!gl) return NextResponse.json({ error: `Invalid GL account: ${line.description}` }, { status: 400 });
   }
 
-  const subtotal = lines.reduce((s, l) => s + (l.amount || 0), 0);
-  const taxAmount = lines.reduce((s, l) => s + (l.taxAmount || 0), 0);
-  const total = subtotal + taxAmount;
-  if (total <= 0) return NextResponse.json({ error: "Total must be > 0" }, { status: 400 });
+  const {
+    loadOrgTaxCodeMaps,
+    resolveLineTaxType,
+    isReverseCharge,
+    documentPayableTotal,
+    buildReverseChargeVatLines,
+  } = await import("@/lib/vat");
+  const maps = await loadOrgTaxCodeMaps(orgId);
+
+  const classified = lines.map((l) => {
+    const taxType = resolveLineTaxType(
+      {
+        amount: Number(l.amount) || 0,
+        taxAmount: Number(l.taxAmount) || 0,
+        taxCodeId: l.taxCodeId,
+      },
+      maps
+    );
+    const code =
+      (l.taxCodeId && maps.byId.get(l.taxCodeId)?.code) ||
+      (isReverseCharge(taxType) ? "RC" : "VAT5");
+    return {
+      ...l,
+      taxType,
+      taxCodeStr: code,
+      amountNum: Number(l.amount) || 0,
+      taxNum: Number(l.taxAmount) || 0,
+    };
+  });
+
+  const subtotal = classified.reduce((s, l) => s + l.amountNum, 0);
+  const taxAmount = classified.reduce((s, l) => s + l.taxNum, 0);
+  const payableTotal = documentPayableTotal(
+    classified.map((l) => ({
+      amount: l.amountNum,
+      taxAmount: l.taxNum,
+      taxType: l.taxType,
+    }))
+  );
+  const jeTotal = Math.round((subtotal + taxAmount) * 100) / 100;
+  if (payableTotal <= 0) return NextResponse.json({ error: "Total must be > 0" }, { status: 400 });
 
   // Resolve supplier name
   let supplierName = body.supplierName?.trim() || "";
@@ -149,7 +187,7 @@ export async function POST(request: Request) {
           description: body.description?.trim() || null,
           subtotal: String(subtotal),
           taxAmount: String(taxAmount),
-          total: String(total),
+          total: String(payableTotal),
           currency,
           reference: body.reference?.trim() || null,
         })
@@ -157,17 +195,18 @@ export async function POST(request: Request) {
 
       if (!exp) throw new Error("Failed to create expense");
 
-      for (let i = 0; i < lines.length; i++) {
-        const l = lines[i];
+      for (let i = 0; i < classified.length; i++) {
+        const l = classified[i];
         await tx.insert(expenseLines).values({
           expenseId: exp.id,
           description: l.description.trim(),
           glAccountId: l.glAccountId,
           quantity: String(l.quantity ?? 1),
           unitPrice: String(l.unitPrice ?? 0),
-          amount: String(l.amount ?? 0),
+          amount: String(l.amountNum),
           taxRate: String(l.taxRate ?? 5),
-          taxAmount: String(l.taxAmount ?? 0),
+          taxAmount: String(l.taxNum),
+          taxCodeId: l.taxCodeId || null,
           lineOrder: i + 1,
         });
       }
@@ -179,6 +218,9 @@ export async function POST(request: Request) {
         const [entryCountRow] = await tx.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
         const jeSeq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
         const entryNumber = `JE-${ym}-${jeSeq}`;
+
+        const [vatInput] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+        const [vatOutput] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
 
         const [je] = await tx
           .insert(journalEntries)
@@ -193,8 +235,8 @@ export async function POST(request: Request) {
             sourceId: exp.id,
             status: "posted",
             currency,
-            totalDebit: String(total),
-            totalCredit: String(total),
+            totalDebit: String(jeTotal),
+            totalCredit: String(jeTotal),
             postedAt: new Date(),
           })
           .returning({ id: journalEntries.id });
@@ -204,9 +246,9 @@ export async function POST(request: Request) {
           const jl: (typeof journalLines.$inferInsert)[] = [];
           let lineOrder = 1;
 
-          for (const l of lines) {
-            const net = Number(l.amount) || 0;
-            const tax = Number(l.taxAmount) || 0;
+          for (const l of classified) {
+            const net = l.amountNum;
+            const tax = l.taxNum;
             if (net > 0) {
               jl.push({
                 journalEntryId: je.id,
@@ -221,9 +263,22 @@ export async function POST(request: Request) {
                 lineOrder: lineOrder++,
               });
             }
-            if (tax > 0) {
-              const [vatInput] = await tx.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
-              if (vatInput) {
+            if (tax > 0 && vatInput) {
+              if (isReverseCharge(l.taxType) && vatOutput) {
+                const rcLines = buildReverseChargeVatLines({
+                  journalEntryId: je.id,
+                  organizationId: orgId,
+                  vatInputAccountId: vatInput.id,
+                  vatOutputAccountId: vatOutput.id,
+                  taxAmount: tax,
+                  taxCode: l.taxCodeStr,
+                  description: l.description.trim(),
+                  currency,
+                  startLineOrder: lineOrder,
+                });
+                jl.push(...rcLines);
+                lineOrder += rcLines.length;
+              } else {
                 jl.push({
                   journalEntryId: je.id,
                   organizationId: orgId,
@@ -234,7 +289,7 @@ export async function POST(request: Request) {
                   currency,
                   baseCurrencyDebit: String(tax),
                   baseCurrencyCredit: "0",
-                  taxCode: "VAT5",
+                  taxCode: l.taxCodeStr,
                   taxAmount: String(tax),
                   lineOrder: lineOrder++,
                 });
@@ -248,10 +303,10 @@ export async function POST(request: Request) {
             accountId: cashAccountId!,
             description: `Payment — ${supplierName || expNumber}`,
             debit: "0",
-            credit: String(total),
+            credit: String(payableTotal),
             currency,
             baseCurrencyDebit: "0",
-            baseCurrencyCredit: String(total),
+            baseCurrencyCredit: String(payableTotal),
             lineOrder: lineOrder++,
           });
 
@@ -268,13 +323,13 @@ export async function POST(request: Request) {
         bankAccountId,
         transactionDate: date,
         description: `Expense — ${supplierName || expNumber}`,
-        amount: String(total),
+        amount: String(payableTotal),
         type: "debit",
         reference: exp.id,
         category: "expense",
       });
 
-      const bal = parseFloat(ba.currentBalance ?? "0") - total;
+      const bal = parseFloat(ba.currentBalance ?? "0") - payableTotal;
       await tx.update(bankAccounts).set({ currentBalance: String(bal) }).where(eq(bankAccounts.id, bankAccountId));
 
       return { expenseId: exp.id, expenseNumber: expNumber };
