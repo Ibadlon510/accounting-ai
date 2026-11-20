@@ -14,6 +14,12 @@ import {
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { sendDocumentEmail } from "@/lib/email/document-email";
+import {
+  classifyTaxType,
+  documentPayableTotal,
+  loadOrgTaxCodeMaps,
+  resolveLineTaxType,
+} from "@/lib/vat";
 
 async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [inv] = await db
@@ -43,10 +49,8 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, inv.customerId)).limit(1);
   const customerName = cust?.name ?? "Customer";
 
-  const total = parseFloat(inv.total ?? "0");
   const subtotal = parseFloat(inv.subtotal ?? "0");
-  const taxAmount = parseFloat(inv.taxAmount ?? "0");
-  if (total <= 0) return;
+  if (subtotal <= 0 && parseFloat(inv.total ?? "0") <= 0) return;
 
   const periodId = await resolveOrCreatePeriod(orgId, inv.issueDate);
   if (!periodId) return;
@@ -58,10 +62,46 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   if (!arAccount || !salesAccount) return;
 
   const lines = await db
-    .select({ taxCode: invoiceLines.taxCode, taxAmount: invoiceLines.taxAmount })
+    .select({
+      taxCode: invoiceLines.taxCode,
+      taxCodeId: invoiceLines.taxCodeId,
+      taxAmount: invoiceLines.taxAmount,
+      amount: invoiceLines.amount,
+    })
     .from(invoiceLines)
     .where(eq(invoiceLines.invoiceId, inv.id));
-  const primaryTaxCode = lines.find((l) => l.taxCode)?.taxCode || "SR";
+
+  const maps = await loadOrgTaxCodeMaps(orgId);
+  const classified = lines.map((l) => {
+    const taxType = resolveLineTaxType(
+      {
+        amount: Number(l.amount ?? 0),
+        taxAmount: Number(l.taxAmount ?? 0),
+        taxCode: l.taxCode,
+        taxCodeId: l.taxCodeId,
+      },
+      maps
+    );
+    return {
+      amount: Number(l.amount ?? 0),
+      taxAmount: Number(l.taxAmount ?? 0),
+      taxCode: l.taxCode || "SR",
+      taxType,
+    };
+  });
+
+  // Sales reverse-charge: supplier does not charge VAT (Box 3 only).
+  const standardOutputVat = classified
+    .filter((l) => classifyTaxType(l.taxType) === "standard")
+    .reduce((s, l) => s + (l.taxAmount || 0), 0);
+  const roundedOutputVat = Math.round(standardOutputVat * 100) / 100;
+  const arTotal = documentPayableTotal(classified);
+  if (arTotal <= 0) return;
+
+  const primaryTaxCode =
+    classified.find((l) => classifyTaxType(l.taxType) === "standard" && l.taxAmount > 0)?.taxCode ||
+    classified.find((l) => l.taxCode)?.taxCode ||
+    "SR";
 
   const ym = inv.issueDate.slice(0, 7).replace("-", "");
   const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
@@ -81,8 +121,8 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       sourceId: inv.id,
       status: "posted",
       currency: inv.currency ?? "AED",
-      totalDebit: String(total),
-      totalCredit: String(total),
+      totalDebit: String(arTotal),
+      totalCredit: String(arTotal),
       postedAt: new Date(),
     })
     .returning({ id: journalEntries.id });
@@ -97,10 +137,10 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     organizationId: orgId,
     accountId: arAccount.id,
     description: `AR — ${customerName}`,
-    debit: String(total),
+    debit: String(arTotal),
     credit: "0",
     currency: cur,
-    baseCurrencyDebit: String(total),
+    baseCurrencyDebit: String(arTotal),
     baseCurrencyCredit: "0",
     lineOrder: 1,
   });
@@ -116,19 +156,19 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     baseCurrencyCredit: String(subtotal),
     lineOrder: 2,
   });
-  if (org?.isVatRegistered && taxAmount > 0 && vatAccount) {
+  if (org?.isVatRegistered && roundedOutputVat > 0 && vatAccount) {
     jl.push({
       journalEntryId: je.id,
       organizationId: orgId,
       accountId: vatAccount.id,
       description: `VAT output — ${customerName}`,
       debit: "0",
-      credit: String(taxAmount),
+      credit: String(roundedOutputVat),
       currency: cur,
       baseCurrencyDebit: "0",
-      baseCurrencyCredit: String(taxAmount),
+      baseCurrencyCredit: String(roundedOutputVat),
       taxCode: primaryTaxCode,
-      taxAmount: String(taxAmount),
+      taxAmount: String(roundedOutputVat),
       lineOrder: 3,
     });
   }

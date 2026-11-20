@@ -12,6 +12,13 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import {
+  buildReverseChargeVatLines,
+  documentPayableTotal,
+  isReverseCharge,
+  loadOrgTaxCodeMaps,
+  resolveLineTaxType,
+} from "@/lib/vat";
 
 async function createBillJournalEntry(orgId: string, billId: string) {
   const [bill] = await db
@@ -41,11 +48,6 @@ async function createBillJournalEntry(orgId: string, billId: string) {
   const [supp] = await db.select({ name: suppliers.name }).from(suppliers).where(eq(suppliers.id, bill.supplierId)).limit(1);
   const supplierName = supp?.name ?? "Supplier";
 
-  const total = parseFloat(bill.total ?? "0");
-  const subtotal = parseFloat(bill.subtotal ?? "0");
-  const taxAmount = parseFloat(bill.taxAmount ?? "0");
-  if (total <= 0) return;
-
   // Get bill lines for per-line GL posting
   const lines = await db
     .select({
@@ -53,17 +55,54 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       amount: billLines.amount,
       taxAmount: billLines.taxAmount,
       taxCode: billLines.taxCode,
+      taxCodeId: billLines.taxCodeId,
       accountId: billLines.accountId,
     })
     .from(billLines)
     .where(eq(billLines.billId, billId))
     .orderBy(billLines.lineOrder);
 
+  const maps = await loadOrgTaxCodeMaps(orgId);
+  const classified = lines.map((l) => {
+    const taxType = resolveLineTaxType(
+      {
+        amount: Number(l.amount ?? 0),
+        taxAmount: Number(l.taxAmount ?? 0),
+        taxCode: l.taxCode,
+        taxCodeId: l.taxCodeId,
+      },
+      maps
+    );
+    return {
+      ...l,
+      amountNum: Number(l.amount ?? 0),
+      taxNum: Number(l.taxAmount ?? 0),
+      taxType,
+      taxCodeStr: l.taxCode || "SR",
+    };
+  });
+
+  const apTotal = documentPayableTotal(
+    classified.map((l) => ({
+      amount: l.amountNum,
+      taxAmount: l.taxNum,
+      taxType: l.taxType,
+    }))
+  );
+  if (apTotal <= 0) return;
+
+  // JE balances at subtotal + all VAT: reverse-charge VAT is Dr input / Cr output
+  // (excluded from AP) while standard VAT is Dr input / included in AP.
+  const allTax = classified.reduce((s, l) => s + l.taxNum, 0);
+  const subtotal = classified.reduce((s, l) => s + l.amountNum, 0);
+  const jeTotal = Math.round((subtotal + allTax) * 100) / 100;
+
   const periodId = await resolveOrCreatePeriod(orgId, bill.issueDate);
   if (!periodId) return;
 
   const [defaultExpenseAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "6300"))).limit(1);
   const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+  const [vatOutputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
   const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
 
   if (!apAccount) return;
@@ -86,8 +125,8 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       sourceId: bill.id,
       status: "posted",
       currency: bill.currency ?? "AED",
-      totalDebit: String(total),
-      totalCredit: String(total),
+      totalDebit: String(jeTotal),
+      totalCredit: String(jeTotal),
       postedAt: new Date(),
     })
     .returning({ id: journalEntries.id });
@@ -98,10 +137,10 @@ async function createBillJournalEntry(orgId: string, billId: string) {
   const cur = bill.currency ?? "AED";
   let lineOrder = 1;
 
-  for (const l of lines) {
+  for (const l of classified) {
     const lineGl = l.accountId || defaultExpenseAccount?.id;
-    const net = parseFloat(l.amount ?? "0");
-    const tax = parseFloat(l.taxAmount ?? "0");
+    const net = l.amountNum;
+    const tax = l.taxNum;
     if (net > 0 && lineGl) {
       jl.push({
         journalEntryId: je.id,
@@ -116,35 +155,51 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         lineOrder: lineOrder++,
       });
     }
-    if (org?.isVatRegistered && tax > 0 && vatInputAccount) {
-      jl.push({
-        journalEntryId: je.id,
-        organizationId: orgId,
-        accountId: vatInputAccount.id,
-        description: `VAT input — ${l.description?.trim() || supplierName}`,
-        debit: String(tax),
-        credit: "0",
-        currency: cur,
-        baseCurrencyDebit: String(tax),
-        baseCurrencyCredit: "0",
-        taxCode: l.taxCode || "SR",
-        taxAmount: String(tax),
-        lineOrder: lineOrder++,
-      });
+    if (org?.isVatRegistered && tax > 0) {
+      if (isReverseCharge(l.taxType) && vatInputAccount && vatOutputAccount) {
+        const rcLines = buildReverseChargeVatLines({
+          journalEntryId: je.id,
+          organizationId: orgId,
+          vatInputAccountId: vatInputAccount.id,
+          vatOutputAccountId: vatOutputAccount.id,
+          taxAmount: tax,
+          taxCode: l.taxCodeStr,
+          description: l.description?.trim() || supplierName,
+          currency: cur,
+          startLineOrder: lineOrder,
+        });
+        jl.push(...rcLines);
+        lineOrder += rcLines.length;
+      } else if (vatInputAccount) {
+        jl.push({
+          journalEntryId: je.id,
+          organizationId: orgId,
+          accountId: vatInputAccount.id,
+          description: `VAT input — ${l.description?.trim() || supplierName}`,
+          debit: String(tax),
+          credit: "0",
+          currency: cur,
+          baseCurrencyDebit: String(tax),
+          baseCurrencyCredit: "0",
+          taxCode: l.taxCodeStr,
+          taxAmount: String(tax),
+          lineOrder: lineOrder++,
+        });
+      }
     }
   }
 
-  // Credit: Accounts Payable
+  // Credit: Accounts Payable (excludes reverse-charge VAT)
   jl.push({
     journalEntryId: je.id,
     organizationId: orgId,
     accountId: apAccount.id,
     description: `Payable — ${supplierName}`,
     debit: "0",
-    credit: String(total),
+    credit: String(apTotal),
     currency: cur,
     baseCurrencyDebit: "0",
-    baseCurrencyCredit: String(total),
+    baseCurrencyCredit: String(apTotal),
     lineOrder: lineOrder++,
   });
 

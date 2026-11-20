@@ -145,7 +145,12 @@ export function CreateBillPanel({ open, onOpenChange, suppliers, onSupplierCreat
 
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const taxAmount = lines.reduce((s, l) => s + l.taxAmount, 0);
-  const total = subtotal + taxAmount;
+  // Reverse-charge VAT is accounted by the recipient — not added to payable.
+  const total = lines.reduce((s, l) => {
+    const tc = taxCodes.find((t) => t.id === l.taxCodeId);
+    if (tc?.type === "reverse_charge") return s + l.amount;
+    return s + l.amount + l.taxAmount;
+  }, 0);
 
   function reset() {
     setSupplierId(""); setBillNumber(""); setLines([emptyLine(defaultTaxCode?.rate ?? 0, defaultTaxCode?.id ?? "")]); setAutoPost(true);

@@ -27,7 +27,17 @@ import { moveToRetentionVault, isVaultConfigured } from "@/lib/storage/vault";
 import { auditLogs } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 
-type LineInput = { id?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
+type LineInput = {
+  id?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  taxRate: number;
+  taxAmount: number;
+  taxCodeId?: string;
+  taxCode?: string;
+};
 type ExpenseLineInput = LineInput & { glAccountId: string };
 type BankTxnInput = { date: string; description: string; amount: number; type: "debit" | "credit"; reference?: string; balance?: number };
 
@@ -291,21 +301,58 @@ async function handleExpense(
           }
           if (tax > 0) {
             const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+            const [vatOutputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
             if (vatInputAccount) {
-              jl.push({
-                journalEntryId: je.id,
-                organizationId: orgId,
-                accountId: vatInputAccount.id,
-                description: `VAT input — ${l.description.trim()}`,
-                debit: String(tax),
-                credit: "0",
-                currency,
-                baseCurrencyDebit: String(tax),
-                baseCurrencyCredit: "0",
-                taxCode: "VAT5",
-                taxAmount: String(tax),
-                lineOrder: lineOrder++,
-              });
+              const {
+                resolveLineTaxType,
+                isReverseCharge,
+                buildReverseChargeVatLines,
+                loadOrgTaxCodeMaps,
+              } = await import("@/lib/vat");
+              const maps = await loadOrgTaxCodeMaps(orgId);
+              const taxType = resolveLineTaxType(
+                {
+                  amount: net,
+                  taxAmount: tax,
+                  taxCode: l.taxCode,
+                  taxCodeId: l.taxCodeId,
+                },
+                maps
+              );
+              const taxCodeStr =
+                (l.taxCodeId && maps.byId.get(l.taxCodeId)?.code) ||
+                l.taxCode ||
+                (isReverseCharge(taxType) ? "RC" : "VAT5");
+              if (isReverseCharge(taxType) && vatOutputAccount) {
+                const rcLines = buildReverseChargeVatLines({
+                  journalEntryId: je.id,
+                  organizationId: orgId,
+                  vatInputAccountId: vatInputAccount.id,
+                  vatOutputAccountId: vatOutputAccount.id,
+                  taxAmount: tax,
+                  taxCode: taxCodeStr,
+                  description: l.description.trim(),
+                  currency,
+                  startLineOrder: lineOrder,
+                });
+                jl.push(...rcLines);
+                lineOrder += rcLines.length;
+              } else {
+                jl.push({
+                  journalEntryId: je.id,
+                  organizationId: orgId,
+                  accountId: vatInputAccount.id,
+                  description: `VAT input — ${l.description.trim()}`,
+                  debit: String(tax),
+                  credit: "0",
+                  currency,
+                  baseCurrencyDebit: String(tax),
+                  baseCurrencyCredit: "0",
+                  taxCode: taxCodeStr,
+                  taxAmount: String(tax),
+                  lineOrder: lineOrder++,
+                });
+              }
             }
           }
         }
@@ -343,19 +390,51 @@ async function handleExpense(
         }
       }
 
-      // Credit Bank/Cash instead of AP — expenses are direct payments
+      // Credit Bank/Cash — reverse-charge VAT is not paid to the supplier
+      const {
+        documentPayableTotal: docPayable,
+        resolveLineTaxType: resolveType,
+        loadOrgTaxCodeMaps: loadMaps,
+      } = await import("@/lib/vat");
+      const mapsForPay = await loadMaps(orgId);
+      const cashCredit = useLines && body.lines
+        ? docPayable(
+            body.lines.map((l) => ({
+              amount: Number(l.amount) || 0,
+              taxAmount: Number(l.taxAmount) || 0,
+              taxType: resolveType(
+                {
+                  amount: Number(l.amount) || 0,
+                  taxAmount: Number(l.taxAmount) || 0,
+                  taxCode: l.taxCode,
+                  taxCodeId: l.taxCodeId,
+                },
+                mapsForPay
+              ),
+            }))
+          )
+        : totalAmount;
       jl.push({
         journalEntryId: je.id,
         organizationId: orgId,
         accountId: cashAccountId!,
         description: `Payment — ${merchantName.trim()}`,
         debit: "0",
-        credit: String(totalAmount),
+        credit: String(cashCredit),
         currency,
         baseCurrencyDebit: "0",
-        baseCurrencyCredit: String(totalAmount),
+        baseCurrencyCredit: String(cashCredit),
         lineOrder: lineOrder++,
       });
+      // Rebalance JE totals when reverse-charge VAT expands both sides
+      const debitSum = jl.reduce((s, row) => s + Number(row.debit || 0), 0);
+      await db
+        .update(journalEntries)
+        .set({
+          totalDebit: String(Math.round(debitSum * 100) / 100),
+          totalCredit: String(Math.round(debitSum * 100) / 100),
+        })
+        .where(eq(journalEntries.id, je.id));
       if (jl.length > 0) await db.insert(journalLines).values(jl);
     }
   }
@@ -572,6 +651,8 @@ async function handleBill(
       quantity: String(l.quantity ?? 1),
       unitPrice: String(l.unitPrice ?? 0),
       amount: String(l.amount ?? 0),
+      taxCode: l.taxCode || null,
+      taxCodeId: l.taxCodeId || null,
       taxRate: String(l.taxRate ?? 5),
       taxAmount: String(l.taxAmount ?? 0),
       accountId: l.glAccountId ?? defaultGlId ?? undefined,
@@ -582,9 +663,51 @@ async function handleBill(
   const periodId = await resolveOrCreatePeriod(orgId, issueDate);
   if (periodId) {
     const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
+    const [vatOutputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
     const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
 
     if (apAccount) {
+      const {
+        loadOrgTaxCodeMaps,
+        resolveLineTaxType,
+        isReverseCharge,
+        documentPayableTotal,
+        buildReverseChargeVatLines,
+      } = await import("@/lib/vat");
+      const maps = await loadOrgTaxCodeMaps(orgId);
+      const classified = lines.map((l) => {
+        const taxType = resolveLineTaxType(
+          {
+            amount: Number(l.amount) || 0,
+            taxAmount: Number(l.taxAmount) || 0,
+            taxCode: l.taxCode,
+            taxCodeId: l.taxCodeId,
+          },
+          maps
+        );
+        return {
+          ...l,
+          taxType,
+          taxCodeStr:
+            (l.taxCodeId && maps.byId.get(l.taxCodeId)?.code) ||
+            l.taxCode ||
+            (isReverseCharge(taxType) ? "RC" : "VAT5"),
+          amountNum: Number(l.amount) || 0,
+          taxNum: Number(l.taxAmount) || 0,
+        };
+      });
+      const apTotal = documentPayableTotal(
+        classified.map((l) => ({
+          amount: l.amountNum,
+          taxAmount: l.taxNum,
+          taxType: l.taxType,
+        }))
+      );
+      const jeTotal =
+        Math.round(
+          (classified.reduce((s, l) => s + l.amountNum + l.taxNum, 0)) * 100
+        ) / 100;
+
       const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
       const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
       const ym = issueDate.slice(0, 7).replace("-", "");
@@ -603,8 +726,8 @@ async function handleBill(
           sourceId: bill.id,
           status: "posted",
           currency: "AED",
-          totalDebit: String(total),
-          totalCredit: String(total),
+          totalDebit: String(jeTotal),
+          totalCredit: String(jeTotal),
           postedAt: new Date(),
         })
         .returning({ id: journalEntries.id });
@@ -612,10 +735,10 @@ async function handleBill(
       if (je) {
         const jl: (typeof journalLines.$inferInsert)[] = [];
         let lineOrder = 1;
-        for (const l of lines) {
+        for (const l of classified) {
           const lineGl = l.glAccountId || defaultGlId;
-          const net = Number(l.amount) || 0;
-          const tax = Number(l.taxAmount) || 0;
+          const net = l.amountNum;
+          const tax = l.taxNum;
           if (net > 0 && lineGl) {
             jl.push({
               journalEntryId: je.id,
@@ -631,20 +754,36 @@ async function handleBill(
             });
           }
           if (tax > 0 && vatInputAccount) {
-            jl.push({
-              journalEntryId: je.id,
-              organizationId: orgId,
-              accountId: vatInputAccount.id,
-              description: `VAT input — ${l.description?.trim() || supplierName}`,
-              debit: String(tax),
-              credit: "0",
-              currency: "AED",
-              baseCurrencyDebit: String(tax),
-              baseCurrencyCredit: "0",
-              taxCode: "VAT5",
-              taxAmount: String(tax),
-              lineOrder: lineOrder++,
-            });
+            if (isReverseCharge(l.taxType) && vatOutputAccount) {
+              const rcLines = buildReverseChargeVatLines({
+                journalEntryId: je.id,
+                organizationId: orgId,
+                vatInputAccountId: vatInputAccount.id,
+                vatOutputAccountId: vatOutputAccount.id,
+                taxAmount: tax,
+                taxCode: l.taxCodeStr,
+                description: l.description?.trim() || supplierName,
+                currency: "AED",
+                startLineOrder: lineOrder,
+              });
+              jl.push(...rcLines);
+              lineOrder += rcLines.length;
+            } else {
+              jl.push({
+                journalEntryId: je.id,
+                organizationId: orgId,
+                accountId: vatInputAccount.id,
+                description: `VAT input — ${l.description?.trim() || supplierName}`,
+                debit: String(tax),
+                credit: "0",
+                currency: "AED",
+                baseCurrencyDebit: String(tax),
+                baseCurrencyCredit: "0",
+                taxCode: l.taxCodeStr,
+                taxAmount: String(tax),
+                lineOrder: lineOrder++,
+              });
+            }
           }
         }
         jl.push({
@@ -653,15 +792,15 @@ async function handleBill(
           accountId: apAccount.id,
           description: `Payable — ${supplierName}`,
           debit: "0",
-          credit: String(total),
+          credit: String(apTotal),
           currency: "AED",
           baseCurrencyDebit: "0",
-          baseCurrencyCredit: String(total),
+          baseCurrencyCredit: String(apTotal),
           lineOrder: lineOrder++,
         });
         await db.insert(journalLines).values(jl);
       }
-      await db.update(bills).set({ journalEntryId: je?.id }).where(eq(bills.id, bill.id));
+      await db.update(bills).set({ journalEntryId: je?.id, total: String(apTotal), amountDue: String(apTotal) }).where(eq(bills.id, bill.id));
     }
   }
 

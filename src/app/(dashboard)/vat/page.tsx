@@ -21,6 +21,21 @@ type VAT201Report = {
   taxablePurchases: number;
   zeroRatedSales: number;
   exemptSales: number;
+  reverseChargeSales?: number;
+  reverseChargePurchases?: number;
+  reverseChargeOutputVat?: number;
+  reverseChargeInputVat?: number;
+  box1a_taxable_sales?: number;
+  box1b_output_vat?: number;
+  box3_reverse_charge_supplies?: number;
+  box4_zero_rated_supplies?: number;
+  box5_exempt_supplies?: number;
+  box8_taxable_purchases?: number;
+  box9_input_vat?: number;
+  box10a_reverse_charge_purchases?: number;
+  box10b_reverse_charge_output_vat?: number;
+  box10c_reverse_charge_input_vat?: number;
+  box15_net_vat_payable?: number;
 };
 
 const emptySummary = { totalOutputVat: 0, totalInputVat: 0, netPayable: 0 };
@@ -61,7 +76,7 @@ export default function VATPage() {
 
   useEffect(() => {
     fetch("/api/dashboard/stats", { cache: "no-store" })
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.vat) setDbSummary(data.vat); })
       .catch(() => {});
   }, []);
@@ -101,6 +116,12 @@ export default function VATPage() {
       </>
     );
   }
+
+  const rcSales = report?.reverseChargeSales ?? report?.box3_reverse_charge_supplies ?? 0;
+  const rcPurchases = report?.reverseChargePurchases ?? report?.box10a_reverse_charge_purchases ?? 0;
+  const rcOutput = report?.reverseChargeOutputVat ?? report?.box10b_reverse_charge_output_vat ?? 0;
+  const rcInput = report?.reverseChargeInputVat ?? report?.box10c_reverse_charge_input_vat ?? 0;
+  const stdOutput = report?.box1b_output_vat ?? (report ? report.outputVat - rcOutput : 0);
 
   return (
     <>
@@ -161,13 +182,19 @@ export default function VATPage() {
               const ftaData = {
                 quarter: report.quarter,
                 period: `${formatDate(report.periodStart)} to ${formatDate(report.periodEnd)}`,
-                standard_rated_sales: report.taxableSales,
+                box1a_standard_rated_sales: report.taxableSales,
+                box1b_output_tax: report.box1b_output_vat ?? stdOutput,
+                box3_reverse_charge_supplies: rcSales,
+                box4_zero_rated_sales: report.zeroRatedSales ?? 0,
+                box5_exempt_sales: report.exemptSales ?? 0,
+                box8_standard_rated_purchases: report.taxablePurchases,
+                box9_input_tax: report.box9_input_vat ?? report.inputVat - rcInput,
+                box10a_reverse_charge_purchases: rcPurchases,
+                box10b_reverse_charge_output_vat: rcOutput,
+                box10c_reverse_charge_input_vat: rcInput,
+                box15_net_tax_payable: report.netVat,
                 total_output_tax: report.outputVat,
-                standard_rated_purchases: report.taxablePurchases,
                 total_input_tax: report.inputVat,
-                net_tax_payable: report.netVat,
-                zero_rated_sales: report.zeroRatedSales ?? 0,
-                exempt_sales: report.exemptSales ?? 0,
               };
               navigator.clipboard.writeText(JSON.stringify(ftaData, null, 2)).then(
                 () => showSuccess("Copied", `${taxLabel} return data copied to clipboard.`),
@@ -198,20 +225,26 @@ export default function VATPage() {
               <div className="text-right">{taxLabel} Amount ({currency})</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
-              <div className="text-text-primary">Standard Rated Sales</div>
+              <div className="text-text-primary">1a Standard Rated Sales</div>
               <div className="text-right font-mono text-text-primary">{formatNumber(report.taxableSales)}</div>
-              <div className="text-right text-text-secondary">{computeRate(report.taxableSales, report.outputVat)}</div>
-              <div className="text-right font-mono text-text-primary">{formatNumber(report.outputVat)}</div>
+              <div className="text-right text-text-secondary">{computeRate(report.taxableSales, stdOutput)}</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(stdOutput)}</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
-              <div className="text-text-primary">Zero Rated Sales</div>
-              <div className="text-right font-mono text-text-secondary">{formatNumber(report.zeroRatedSales ?? 0)}</div>
+              <div className="text-text-primary">3 Reverse Charge Supplies</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(rcSales)}</div>
+              <div className="text-right text-text-secondary">—</div>
+              <div className="text-right font-mono text-text-secondary">0.00</div>
+            </div>
+            <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
+              <div className="text-text-primary">4 Zero Rated Sales</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(report.zeroRatedSales ?? 0)}</div>
               <div className="text-right text-text-secondary">0%</div>
               <div className="text-right font-mono text-text-secondary">0.00</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
-              <div className="text-text-primary">Exempt Sales</div>
-              <div className="text-right font-mono text-text-secondary">{formatNumber(report.exemptSales ?? 0)}</div>
+              <div className="text-text-primary">5 Exempt Sales</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(report.exemptSales ?? 0)}</div>
               <div className="text-right text-text-secondary">—</div>
               <div className="text-right font-mono text-text-secondary">0.00</div>
             </div>
@@ -221,10 +254,21 @@ export default function VATPage() {
               <div className="text-right font-mono text-error">{formatNumber(report.outputVat)}</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
-              <div className="text-text-primary">Standard Rated Purchases</div>
+              <div className="text-text-primary">8 Standard Rated Purchases</div>
               <div className="text-right font-mono text-text-primary">{formatNumber(report.taxablePurchases)}</div>
-              <div className="text-right text-text-secondary">{computeRate(report.taxablePurchases, report.inputVat)}</div>
-              <div className="text-right font-mono text-text-primary">{formatNumber(report.inputVat)}</div>
+              <div className="text-right text-text-secondary">{computeRate(report.taxablePurchases, report.box9_input_vat ?? report.inputVat - rcInput)}</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(report.box9_input_vat ?? report.inputVat - rcInput)}</div>
+            </div>
+            <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
+              <div className="text-text-primary">10a Reverse Charge Purchases</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(rcPurchases)}</div>
+              <div className="text-right text-text-secondary">{computeRate(rcPurchases, rcOutput)}</div>
+              <div className="text-right font-mono text-text-primary">{formatNumber(rcOutput)}</div>
+            </div>
+            <div className="grid grid-cols-4 gap-4 border-t border-border-subtle/50 px-5 py-2.5 text-[13px]">
+              <div className="text-text-primary">10c RC Input {taxLabel} Recoverable</div>
+              <div></div><div></div>
+              <div className="text-right font-mono text-success">{formatNumber(rcInput)}</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t border-border-subtle bg-canvas/30 px-5 py-2.5 text-[13px] font-semibold">
               <div className="text-text-primary">Total Input {taxLabel}</div>
@@ -232,7 +276,7 @@ export default function VATPage() {
               <div className="text-right font-mono text-success">{formatNumber(report.inputVat)}</div>
             </div>
             <div className="grid grid-cols-4 gap-4 border-t-2 border-text-primary/20 bg-surface px-5 py-3 text-[14px] font-bold">
-              <div className="text-text-primary">Net {taxLabel} Payable</div>
+              <div className="text-text-primary">15 Net {taxLabel} Payable</div>
               <div></div><div></div>
               <div className="text-right font-mono text-text-primary">{currency} {formatNumber(report.netVat)}</div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   EntityPanel,
   EntityPanelContent,
@@ -25,6 +25,7 @@ import { GLCombobox } from "@/components/ai/gl-combobox";
 type Supplier = { id: string; name: string; email: string; phone: string; isActive: boolean };
 type BankAccount = { id: string; accountName: string; bankName: string; currency: string };
 type Account = { id: string; code: string; name: string };
+type TaxCode = { id: string; code: string; name: string; rate: number; type: string; isActive: boolean };
 type ExpenseLine = {
   id: string;
   description: string;
@@ -34,6 +35,7 @@ type ExpenseLine = {
   amount: number;
   taxRate: number;
   taxAmount: number;
+  taxCodeId: string;
 };
 
 interface CreateExpensePanelProps {
@@ -50,11 +52,20 @@ interface CreateExpensePanelProps {
     description?: string;
     currency?: string;
     reference?: string;
-    lines: { description: string; glAccountId: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number }[];
+    lines: {
+      description: string;
+      glAccountId: string;
+      quantity: number;
+      unitPrice: number;
+      amount: number;
+      taxRate: number;
+      taxAmount: number;
+      taxCodeId?: string;
+    }[];
   }) => void | Promise<void>;
 }
 
-function emptyLine(accounts: Account[]): ExpenseLine {
+function emptyLine(accounts: Account[], defaultTaxRate = 5, defaultTaxCodeId = ""): ExpenseLine {
   const defaultGlId = accounts.find((a) => a.code === "6300" || a.code?.startsWith("6"))?.id ?? accounts[0]?.id ?? "";
   return {
     id: `new-${Date.now()}-${Math.random()}`,
@@ -63,8 +74,9 @@ function emptyLine(accounts: Account[]): ExpenseLine {
     quantity: 1,
     unitPrice: 0,
     amount: 0,
-    taxRate: 5,
+    taxRate: defaultTaxRate,
     taxAmount: 0,
+    taxCodeId: defaultTaxCodeId,
   };
 }
 
@@ -75,7 +87,32 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [currency, setCurrency] = useState("AED");
+  const [taxCodes, setTaxCodes] = useState<TaxCode[]>([]);
   const [lines, setLines] = useState<ExpenseLine[]>([emptyLine(accounts)]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/org/tax-codes")
+      .then((r) => (r.ok ? r.json() : { taxCodes: [] }))
+      .then((d) => {
+        const active = (d.taxCodes ?? []).filter((tc: TaxCode) => tc.isActive);
+        setTaxCodes(active);
+        const defaultTc =
+          active.find((tc: TaxCode) => tc.type === "input" || tc.type === "output") ??
+          active.find((tc: TaxCode) => tc.rate > 0) ??
+          active[0];
+        if (defaultTc) {
+          setLines((prev) =>
+            prev.map((l) =>
+              !l.taxCodeId
+                ? { ...l, taxRate: defaultTc.rate, taxCodeId: defaultTc.id }
+                : l
+            )
+          );
+        }
+      })
+      .catch(() => {});
+  }, [open]);
 
   function updateLine(index: number, field: keyof ExpenseLine, value: string | number) {
     setLines((prev) =>
@@ -92,12 +129,43 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
     );
   }
 
-  function addLine() { setLines((prev) => [...prev, emptyLine(accounts)]); }
-  function removeLine(index: number) { if (lines.length > 1) setLines((prev) => prev.filter((_, i) => i !== index)); }
+  function updateLineFields(index: number, fields: Partial<ExpenseLine>) {
+    setLines((prev) =>
+      prev.map((line, i) => {
+        if (i !== index) return line;
+        const updated = { ...line, ...fields };
+        const qty = Number(updated.quantity) || 0;
+        const price = Number(updated.unitPrice) || 0;
+        const rate = Number(updated.taxRate) || 0;
+        updated.amount = Math.round(qty * price * 100) / 100;
+        updated.taxAmount = Math.round((updated.amount * rate) / 100 * 100) / 100;
+        return updated;
+      })
+    );
+  }
+
+  const defaultTaxCode =
+    taxCodes.find((tc) => tc.type === "input" || tc.type === "output") ??
+    taxCodes.find((tc) => tc.rate > 0) ??
+    taxCodes[0];
+
+  function addLine() {
+    setLines((prev) => [
+      ...prev,
+      emptyLine(accounts, defaultTaxCode?.rate ?? 5, defaultTaxCode?.id ?? ""),
+    ]);
+  }
+  function removeLine(index: number) {
+    if (lines.length > 1) setLines((prev) => prev.filter((_, i) => i !== index));
+  }
 
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const taxAmount = lines.reduce((s, l) => s + l.taxAmount, 0);
-  const total = subtotal + taxAmount;
+  const total = lines.reduce((s, l) => {
+    const tc = taxCodes.find((t) => t.id === l.taxCodeId);
+    if (tc?.type === "reverse_charge") return s + l.amount;
+    return s + l.amount + l.taxAmount;
+  }, 0);
 
   function reset() {
     setDate(new Date().toISOString().slice(0, 10));
@@ -106,7 +174,7 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
     setDescription("");
     setReference("");
     setCurrency("AED");
-    setLines([emptyLine(accounts)]);
+    setLines([emptyLine(accounts, defaultTaxCode?.rate ?? 5, defaultTaxCode?.id ?? "")]);
   }
 
   async function handleSave() {
@@ -131,6 +199,7 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
           amount: l.amount,
           taxRate: l.taxRate,
           taxAmount: l.taxAmount,
+          taxCodeId: l.taxCodeId || undefined,
         })),
       });
       showSuccess("Expense recorded", `Expense for ${currency} ${formatNumber(total)} has been recorded.`);
@@ -212,10 +281,31 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
                     <Input type="number" min="0" step="0.01" value={line.unitPrice || ""} onChange={(e) => updateLine(i, "unitPrice", Number(e.target.value))} placeholder="0.00" className="h-8 rounded-lg border-border-subtle text-right text-[13px]" />
                   </div>
                   <div className="col-span-1">
-                    <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
-                      <option value={5}>5%</option>
-                      <option value={0}>0%</option>
-                    </StyledSelect>
+                    {taxCodes.length > 0 ? (
+                      <StyledSelect
+                        value={line.taxCodeId || String(line.taxRate)}
+                        onChange={(e) => {
+                          const tc = taxCodes.find((t) => t.id === e.target.value);
+                          if (tc) {
+                            updateLineFields(i, { taxRate: tc.rate, taxCodeId: tc.id });
+                          } else {
+                            updateLineFields(i, { taxRate: Number(e.target.value), taxCodeId: "" });
+                          }
+                        }}
+                        className="h-8 text-center text-[12px]"
+                      >
+                        {taxCodes.map((tc) => (
+                          <option key={tc.id} value={tc.id}>
+                            {tc.code} ({tc.rate}%)
+                          </option>
+                        ))}
+                      </StyledSelect>
+                    ) : (
+                      <StyledSelect value={line.taxRate} onChange={(e) => updateLine(i, "taxRate", Number(e.target.value))} className="h-8 text-center text-[12px]">
+                        <option value={5}>5%</option>
+                        <option value={0}>0%</option>
+                      </StyledSelect>
+                    )}
                   </div>
                   <div className="col-span-2 pt-1 text-right font-mono text-[13px] font-medium text-text-primary">{formatNumber(line.amount)}</div>
                   <div className="col-span-2 flex items-center gap-1">
@@ -261,7 +351,7 @@ export function CreateExpensePanel({ open, onOpenChange, suppliers, bankAccounts
               />
             </EntityPanelSidebarSection>
             <EntityPanelInfoMessage icon={<Info className="h-3.5 w-3.5" />}>
-              Expenses are direct payments. A journal entry (Dr Expense, Cr Bank) and bank transaction will be created automatically.
+              Expenses are direct payments. Reverse-charge tax codes post both input and output VAT; cash is credited for the net only.
             </EntityPanelInfoMessage>
           </EntityPanelSidebar>
         </EntityPanelBody>

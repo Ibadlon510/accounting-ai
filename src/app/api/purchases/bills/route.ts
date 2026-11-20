@@ -172,6 +172,55 @@ export async function POST(request: Request) {
       if (tc) defaultTaxCode = tc.code;
     }
 
+    const { loadOrgTaxCodeMaps, resolveLineTaxType, documentPayableTotal } = await import("@/lib/vat");
+    const maps = await loadOrgTaxCodeMaps(orgId);
+
+    const normalizedLines = lines.map((l) => {
+      const qty = Number(l.quantity) || 0;
+      const price = Number(l.unitPrice) || 0;
+      const amt = Number(l.amount) || qty * price;
+      let lineTaxCode = l.taxCode || defaultTaxCode;
+      let lineTaxCodeId = l.taxCodeId || null;
+      let lineType = resolveLineTaxType(
+        { amount: amt, taxAmount: Number(l.taxAmount) || 0, taxCode: lineTaxCode, taxCodeId: lineTaxCodeId },
+        maps
+      );
+      if (lineTaxCodeId && maps.byId.has(lineTaxCodeId)) {
+        lineTaxCode = maps.byId.get(lineTaxCodeId)!.code;
+        lineType = maps.byId.get(lineTaxCodeId)!.type;
+      }
+      const rate = org?.isVatRegistered ? (isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate)) : 0;
+      // Purchases reverse-charge: keep VAT amount for dual posting; exclude from payable.
+      const taxAmt = org?.isVatRegistered
+        ? isNaN(Number(l.taxAmount))
+          ? Math.round((amt * rate) / 100 * 100) / 100
+          : Number(l.taxAmount)
+        : 0;
+      return {
+        ...l,
+        qty,
+        price,
+        amt,
+        rate,
+        taxAmt,
+        lineTaxCode,
+        lineTaxCodeId,
+        lineType,
+      };
+    });
+
+    const computedTax = normalizedLines.reduce((s, l) => s + l.taxAmt, 0);
+    const computedTotal = documentPayableTotal(
+      normalizedLines.map((l) => ({
+        amount: l.amt,
+        taxAmount: l.taxAmt,
+        taxType: l.lineType,
+      }))
+    );
+    if (computedTotal <= 0) {
+      return NextResponse.json({ error: "Total must be greater than zero" }, { status: 400 });
+    }
+
     const [bill] = await db
       .insert(bills)
       .values({
@@ -182,10 +231,10 @@ export async function POST(request: Request) {
         dueDate,
         status: "draft",
         subtotal: String(Number(subtotal) || 0),
-        taxAmount: String(org?.isVatRegistered ? (Number(taxAmount) || 0) : 0),
-        total: String(totalNum),
+        taxAmount: String(org?.isVatRegistered ? computedTax : 0),
+        total: String(computedTotal),
         amountPaid: "0",
-        amountDue: String(totalNum),
+        amountDue: String(computedTotal),
         notes: body.notes?.trim() || null,
         terms: body.terms?.trim() || null,
         paymentInfo: body.paymentInfo?.trim() || null,
@@ -194,32 +243,19 @@ export async function POST(request: Request) {
 
     if (!bill) return NextResponse.json({ error: "Failed to create bill" }, { status: 500 });
 
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      const qty = Number(l.quantity) || 0;
-      const price = Number(l.unitPrice) || 0;
-      const amt = Number(l.amount) || (qty * price);
-      const rate = org?.isVatRegistered ? (isNaN(Number(l.taxRate)) ? 5 : Number(l.taxRate)) : 0;
-      const taxAmt = org?.isVatRegistered ? (isNaN(Number(l.taxAmount)) ? Math.round(amt * rate / 100 * 100) / 100 : Number(l.taxAmount)) : 0;
-
-      let lineTaxCode = l.taxCode || defaultTaxCode;
-      let lineTaxCodeId = l.taxCodeId || null;
-      if (lineTaxCodeId) {
-        const [tc] = await db.select({ code: taxCodes.code }).from(taxCodes).where(eq(taxCodes.id, lineTaxCodeId)).limit(1);
-        if (tc) lineTaxCode = tc.code;
-      }
-
+    for (let i = 0; i < normalizedLines.length; i++) {
+      const l = normalizedLines[i];
       await db.insert(billLines).values({
         billId: bill.id,
         itemId: l.productId || null,
         description: (l.description ?? "").trim() || "Line item",
-        quantity: String(qty),
-        unitPrice: String(price),
-        amount: String(amt),
-        taxCode: lineTaxCode,
-        taxCodeId: lineTaxCodeId,
-        taxRate: String(rate),
-        taxAmount: String(taxAmt),
+        quantity: String(l.qty),
+        unitPrice: String(l.price),
+        amount: String(l.amt),
+        taxCode: l.lineTaxCode,
+        taxCodeId: l.lineTaxCodeId,
+        taxRate: String(l.rate),
+        taxAmount: String(l.taxAmt),
         lineOrder: i,
       });
     }
