@@ -1037,3 +1037,117 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Fixed Assets (register) ────────────────────────────────
+// Ledger postings (capitalization, depreciation, disposal) are immutable JEs.
+export const fixedAssets = pgTable("fixed_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  assetNumber: varchar("asset_number", { length: 30 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }).notNull().default("equipment"), // furniture, equipment, vehicle, computer, other
+  assetAccountId: uuid("asset_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  accumDepAccountId: uuid("accum_dep_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  depExpenseAccountId: uuid("dep_expense_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  acquisitionDate: date("acquisition_date").notNull(),
+  cost: numeric("cost", { precision: 18, scale: 2 }).notNull(),
+  salvageValue: numeric("salvage_value", { precision: 18, scale: 2 }).notNull().default("0"),
+  usefulLifeMonths: integer("useful_life_months").notNull(),
+  depreciationMethod: varchar("depreciation_method", { length: 30 }).notNull().default("straight_line"),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // active, fully_depreciated, disposed
+  accumulatedDepreciation: numeric("accumulated_depreciation", { precision: 18, scale: 2 }).notNull().default("0"),
+  capitalizationJournalEntryId: uuid("capitalization_journal_entry_id"),
+  disposalDate: date("disposal_date"),
+  disposalProceeds: numeric("disposal_proceeds", { precision: 18, scale: 2 }),
+  disposalJournalEntryId: uuid("disposal_journal_entry_id"),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("fixed_assets_org_number_idx").on(t.organizationId, t.assetNumber),
+  index("fixed_assets_org_status_idx").on(t.organizationId, t.status),
+]);
+
+// ─── Depreciation Runs (period batch) ───────────────────────
+export const depreciationRuns = pgTable("depreciation_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  periodYear: integer("period_year").notNull(),
+  periodMonth: integer("period_month").notNull(), // 1-12
+  runDate: date("run_date").notNull(),
+  totalAmount: numeric("total_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  assetCount: integer("asset_count").notNull().default(0),
+  journalEntryId: uuid("journal_entry_id"),
+  status: varchar("status", { length: 15 }).notNull().default("posted"), // posted (immutable once created)
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("depreciation_runs_org_period_idx").on(t.organizationId, t.periodYear, t.periodMonth),
+  index("depreciation_runs_org_idx").on(t.organizationId),
+]);
+
+// ─── Depreciation Schedule Lines ────────────────────────────
+export const depreciationSchedules = pgTable("depreciation_schedules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  depreciationRunId: uuid("depreciation_run_id")
+    .notNull()
+    .references(() => depreciationRuns.id, { onDelete: "cascade" }),
+  fixedAssetId: uuid("fixed_asset_id")
+    .notNull()
+    .references(() => fixedAssets.id, { onDelete: "cascade" }),
+  periodYear: integer("period_year").notNull(),
+  periodMonth: integer("period_month").notNull(),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+  accumulatedAfter: numeric("accumulated_after", { precision: 18, scale: 2 }).notNull(),
+  bookValueAfter: numeric("book_value_after", { precision: 18, scale: 2 }).notNull(),
+  journalEntryId: uuid("journal_entry_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("depreciation_schedules_asset_period_idx").on(
+    t.organizationId,
+    t.fixedAssetId,
+    t.periodYear,
+    t.periodMonth
+  ),
+  index("depreciation_schedules_run_idx").on(t.depreciationRunId),
+]);
+
+// ─── Asset Disposals ────────────────────────────────────────
+export const assetDisposals = pgTable("asset_disposals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  fixedAssetId: uuid("fixed_asset_id")
+    .notNull()
+    .references(() => fixedAssets.id, { onDelete: "cascade" }),
+  disposalDate: date("disposal_date").notNull(),
+  proceeds: numeric("proceeds", { precision: 18, scale: 2 }).notNull().default("0"),
+  costAtDisposal: numeric("cost_at_disposal", { precision: 18, scale: 2 }).notNull(),
+  accumDepAtDisposal: numeric("accum_dep_at_disposal", { precision: 18, scale: 2 }).notNull(),
+  bookValueAtDisposal: numeric("book_value_at_disposal", { precision: 18, scale: 2 }).notNull(),
+  gainOrLoss: numeric("gain_or_loss", { precision: 18, scale: 2 }).notNull().default("0"),
+  proceedsAccountId: uuid("proceeds_account_id").references(() => chartOfAccounts.id),
+  journalEntryId: uuid("journal_entry_id"),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("asset_disposals_asset_idx").on(t.organizationId, t.fixedAssetId),
+]);
