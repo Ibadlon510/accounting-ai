@@ -162,6 +162,13 @@
       "when": 1774430218662,
       "tag": "0022_fix_fk_circular",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1774500000026,
+      "tag": "0026_payroll_pay_runs",
+      "breakpoints": true
     }
   ]
 }
