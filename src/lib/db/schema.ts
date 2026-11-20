@@ -657,7 +657,122 @@ export const employees = pgTable("employees", {
   basicSalary: numeric("basic_salary", { precision: 18, scale: 2 }),
   housingAllowance: numeric("housing_allowance", { precision: 18, scale: 2 }),
   transportAllowance: numeric("transport_allowance", { precision: 18, scale: 2 }),
+  /** MOL / labour card person ID used in WPS EDR records */
+  labourCardNumber: varchar("labour_card_number", { length: 40 }),
+  /** Employee IBAN for WPS salary transfer */
+  iban: varchar("iban", { length: 34 }),
+  /** UAE bank routing / agent code for WPS */
+  bankRoutingCode: varchar("bank_routing_code", { length: 20 }),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Pay Runs ───────────────────────────────────────────────
+export const payRunStatuses = ["draft", "posted"] as const;
+export type PayRunStatus = (typeof payRunStatuses)[number];
+
+export const payRuns = pgTable("pay_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  runNumber: varchar("run_number", { length: 30 }).notNull(),
+  periodYear: integer("period_year").notNull(),
+  periodMonth: integer("period_month").notNull(), // 1-12
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  entryDate: date("entry_date").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  payFrom: varchar("pay_from", { length: 20 }).notNull().default("payable"), // cash | payable
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  employeeCount: integer("employee_count").notNull().default(0),
+  totalBasic: numeric("total_basic", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalHousing: numeric("total_housing", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalTransport: numeric("total_transport", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalGross: numeric("total_gross", { precision: 18, scale: 2 }).notNull().default("0"),
+  journalEntryId: uuid("journal_entry_id"),
+  notes: text("notes"),
+  /** Employer MOL / establishment ID used when generating WPS */
+  employerUniqueId: varchar("employer_unique_id", { length: 40 }),
+  wpsGeneratedAt: timestamp("wps_generated_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  postedBy: uuid("posted_by").references(() => users.id, { onDelete: "set null" }),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Salary Records (pay-run lines + foundation history) ────
+export const salaryRecords = pgTable("salary_records", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payRunId: uuid("pay_run_id").references(() => payRuns.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "restrict" }),
+  periodYear: integer("period_year").notNull(),
+  periodMonth: integer("period_month").notNull(),
+  periodStart: date("period_start"),
+  periodEnd: date("period_end"),
+  basicSalary: numeric("basic_salary", { precision: 18, scale: 2 }).notNull().default("0"),
+  housingAllowance: numeric("housing_allowance", { precision: 18, scale: 2 }).notNull().default("0"),
+  transportAllowance: numeric("transport_allowance", { precision: 18, scale: 2 }).notNull().default("0"),
+  variablePay: numeric("variable_pay", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalGross: numeric("total_gross", { precision: 18, scale: 2 }).notNull().default("0"),
+  daysInPeriod: integer("days_in_period").notNull().default(30),
+  daysUnpaidLeave: integer("days_unpaid_leave").notNull().default(0),
+  /** Snapshot for WPS export */
+  labourCardNumber: varchar("labour_card_number", { length: 40 }),
+  iban: varchar("iban", { length: 34 }),
+  bankRoutingCode: varchar("bank_routing_code", { length: 20 }),
+  employeeName: varchar("employee_name", { length: 255 }),
+  journalEntryId: uuid("journal_entry_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Gratuity / EOS Provisions ──────────────────────────────
+export const gratuityProvisions = pgTable("gratuity_provisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  provisionNumber: varchar("provision_number", { length: 30 }).notNull(),
+  asOfDate: date("as_of_date").notNull(),
+  entryDate: date("entry_date").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("posted"),
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  employeeCount: integer("employee_count").notNull().default(0),
+  totalLiability: numeric("total_liability", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalIncrease: numeric("total_increase", { precision: 18, scale: 2 }).notNull().default("0"),
+  journalEntryId: uuid("journal_entry_id"),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const gratuityProvisionLines = pgTable("gratuity_provision_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  provisionId: uuid("provision_id")
+    .notNull()
+    .references(() => gratuityProvisions.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "restrict" }),
+  employeeName: varchar("employee_name", { length: 255 }),
+  joinDate: date("join_date"),
+  yearsOfService: numeric("years_of_service", { precision: 10, scale: 4 }).notNull().default("0"),
+  basicSalary: numeric("basic_salary", { precision: 18, scale: 2 }).notNull().default("0"),
+  dailyWage: numeric("daily_wage", { precision: 18, scale: 4 }).notNull().default("0"),
+  cumulativeLiability: numeric("cumulative_liability", { precision: 18, scale: 2 }).notNull().default("0"),
+  previouslyProvisioned: numeric("previously_provisioned", { precision: 18, scale: 2 }).notNull().default("0"),
+  increaseAmount: numeric("increase_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  calculationNotes: text("calculation_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

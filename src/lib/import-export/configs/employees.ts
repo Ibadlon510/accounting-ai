@@ -19,6 +19,9 @@ export const employeesConfig: EntityConfig = {
     { field: "basicSalary", header: "Basic Salary", type: "number", sample: "10000.00" },
     { field: "housingAllowance", header: "Housing Allowance", type: "number", sample: "3000.00" },
     { field: "transportAllowance", header: "Transport Allowance", type: "number", sample: "1500.00" },
+    { field: "labourCardNumber", header: "Labour Card Number", type: "string", sample: "784-1990-1234567-1" },
+    { field: "iban", header: "IBAN", type: "string", sample: "AE070331234567890123456" },
+    { field: "bankRoutingCode", header: "Bank Routing Code", type: "string", sample: "403510101" },
     { field: "isActive", header: "Active", type: "boolean", sample: "true" },
   ],
 };
