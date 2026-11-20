@@ -27,6 +27,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       total: invoices.total,
       currency: invoices.currency,
       journalEntryId: invoices.journalEntryId,
+      projectId: invoices.projectId,
     })
     .from(invoices)
     .where(and(eq(invoices.id, invoiceId), eq(invoices.organizationId, orgId)))
@@ -92,6 +93,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const jl: (typeof journalLines.$inferInsert)[] = [];
   const cur = inv.currency ?? "AED";
 
+  const projectId = inv.projectId ?? null;
   jl.push({
     journalEntryId: je.id,
     organizationId: orgId,
@@ -102,6 +104,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     currency: cur,
     baseCurrencyDebit: String(total),
     baseCurrencyCredit: "0",
+    projectId,
     lineOrder: 1,
   });
   jl.push({
@@ -114,6 +117,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     currency: cur,
     baseCurrencyDebit: "0",
     baseCurrencyCredit: String(subtotal),
+    projectId,
     lineOrder: 2,
   });
   if (org?.isVatRegistered && taxAmount > 0 && vatAccount) {
@@ -129,6 +133,7 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
       baseCurrencyCredit: String(taxAmount),
       taxCode: primaryTaxCode,
       taxAmount: String(taxAmount),
+      projectId,
       lineOrder: 3,
     });
   }

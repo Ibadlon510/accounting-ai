@@ -144,7 +144,7 @@ export async function POST(request: Request) {
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;
 
-  let body: { supplierId: string; billNumber: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string };
+  let body: { supplierId: string; billNumber: string; issueDate: string; dueDate: string; lines: LineInput[]; subtotal: number; taxAmount: number; total: number; notes?: string; terms?: string; paymentInfo?: string; projectId?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -189,6 +189,7 @@ export async function POST(request: Request) {
         notes: body.notes?.trim() || null,
         terms: body.terms?.trim() || null,
         paymentInfo: body.paymentInfo?.trim() || null,
+        projectId: body.projectId?.trim() || null,
       })
       .returning({ id: bills.id, billNumber: bills.billNumber, supplierId: bills.supplierId, issueDate: bills.issueDate, dueDate: bills.dueDate, status: bills.status, subtotal: bills.subtotal, taxAmount: bills.taxAmount, total: bills.total, amountPaid: bills.amountPaid, amountDue: bills.amountDue });
 

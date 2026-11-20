@@ -25,6 +25,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
       total: bills.total,
       currency: bills.currency,
       journalEntryId: bills.journalEntryId,
+      projectId: bills.projectId,
     })
     .from(bills)
     .where(and(eq(bills.id, billId), eq(bills.organizationId, orgId)))
@@ -96,6 +97,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
 
   const jl: (typeof journalLines.$inferInsert)[] = [];
   const cur = bill.currency ?? "AED";
+  const projectId = bill.projectId ?? null;
   let lineOrder = 1;
 
   for (const l of lines) {
@@ -113,6 +115,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         currency: cur,
         baseCurrencyDebit: String(net),
         baseCurrencyCredit: "0",
+        projectId,
         lineOrder: lineOrder++,
       });
     }
@@ -129,6 +132,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         baseCurrencyCredit: "0",
         taxCode: l.taxCode || "SR",
         taxAmount: String(tax),
+        projectId,
         lineOrder: lineOrder++,
       });
     }
@@ -145,6 +149,7 @@ async function createBillJournalEntry(orgId: string, billId: string) {
     currency: cur,
     baseCurrencyDebit: "0",
     baseCurrencyCredit: String(total),
+    projectId,
     lineOrder: lineOrder++,
   });
 

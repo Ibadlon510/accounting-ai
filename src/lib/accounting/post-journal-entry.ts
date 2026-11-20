@@ -18,6 +18,7 @@ interface JournalLine {
   credit: number;
   taxCode?: string;
   taxAmount?: number;
+  projectId?: string | null;
 }
 
 interface PostJournalEntryParams {
@@ -134,6 +135,7 @@ async function execute(
       baseCurrencyCredit: line.credit.toFixed(2),
       taxCode: line.taxCode,
       taxAmount: line.taxAmount != null ? line.taxAmount.toFixed(2) : undefined,
+      projectId: line.projectId ?? null,
       lineOrder: idx,
     }))
   );

@@ -100,7 +100,7 @@ export async function GET(request: Request) {
   }
 }
 
-type LineInput = { accountId: string; description?: string; debit: number; credit: number };
+type LineInput = { accountId: string; description?: string; debit: number; credit: number; projectId?: string | null };
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
   const roleCheck = await requireOrgRole(orgId, "accountant");
   if (roleCheck instanceof NextResponse) return roleCheck;
 
-  let body: { entryDate: string; description: string; reference?: string; lines: LineInput[] };
+  let body: { entryDate: string; description: string; reference?: string; projectId?: string | null; lines: LineInput[] };
   try {
     body = await request.json();
   } catch {
@@ -117,6 +117,7 @@ export async function POST(request: Request) {
   }
 
   const { entryDate, description, reference, lines } = body;
+  const entryProjectId = body.projectId?.trim() || null;
   if (!entryDate || !description?.trim()) return NextResponse.json({ error: "Entry date and description are required" }, { status: 400 });
   if (!lines?.length || lines.length < 2) return NextResponse.json({ error: "At least 2 lines are required" }, { status: 400 });
 
@@ -126,6 +127,7 @@ export async function POST(request: Request) {
       description: (l.description ?? "").trim(),
       debit: Math.max(0, Number(l.debit) || 0),
       credit: Math.max(0, Number(l.credit) || 0),
+      projectId: l.projectId?.trim() || entryProjectId,
     }))
     .filter((l) => l.accountId && (l.debit > 0 || l.credit > 0));
 
@@ -179,6 +181,7 @@ export async function POST(request: Request) {
           currency: "AED",
           baseCurrencyDebit: String(l.debit),
           baseCurrencyCredit: String(l.credit),
+          projectId: l.projectId,
           lineOrder: i + 1,
         });
       }

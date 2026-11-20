@@ -17,6 +17,7 @@ import {
   Settings,
   Grid3X3,
   FolderOpen,
+  FolderKanban,
   LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -44,6 +45,7 @@ const baseNavItems = [
   { icon: ShoppingCart, label: "Purchases", href: "/purchases" },
   { icon: FolderOpen, label: "Documents", href: "/documents" },
   { icon: Package, label: "Inventory", href: "/inventory" },
+  { icon: FolderKanban, label: "Projects", href: "/projects" },
   { icon: Landmark, label: "Banking", href: "/banking" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
   { icon: Receipt, label: "VAT", href: "/vat" },
