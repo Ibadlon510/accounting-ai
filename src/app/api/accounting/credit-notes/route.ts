@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count, desc } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -75,6 +76,9 @@ type LineInput = {
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   let body: {
     creditNoteType: "sales" | "purchase";

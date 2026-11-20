@@ -5,6 +5,7 @@ import { getEntityConfig } from "@/lib/import-export/configs";
 import { validateCSV } from "@/lib/import-export/engine/validator";
 import { executeImport } from "@/lib/import-export/engine/upserter";
 import { MAX_FILE_SIZE } from "@/lib/import-export/types";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function POST(
   request: Request,
@@ -20,6 +21,8 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   const userId = await getSessionUserId();
 

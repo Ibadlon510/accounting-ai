@@ -168,17 +168,17 @@ export async function POST(request: NextRequest) {
         const orgId = subscription.metadata?.orgId;
         if (!orgId) break;
 
-        // Downgrade to FREE
+        // Enter Archive mode (read-only) — not FREE
         await db
           .update(organizations)
           .set({
-            subscriptionPlan: "FREE",
+            subscriptionPlan: "ARCHIVE",
             stripeSubscriptionId: null,
             stripePriceId: null,
             subscriptionStatus: "canceled",
             currentPeriodEnd: null,
             tokenBalance: 0,
-            maxUsers: PLANS.FREE.maxUsers,
+            maxUsers: PLANS.ARCHIVE.maxUsers,
             extraSeats: 0,
             updatedAt: new Date(),
           })
@@ -187,11 +187,12 @@ export async function POST(request: NextRequest) {
         await createNotification({
           orgId,
           category: "billing",
-          title: "Subscription Canceled",
-          message: "Your Pro subscription has ended. You're now on the Free plan.",
+          title: "Workspace Archived",
+          message:
+            "Your Pro subscription has ended. This workspace is now read-only. Renew to restore full access.",
           icon: "CreditCard",
-          actionUrl: "/settings",
-          actionLabel: "Resubscribe",
+          actionUrl: "/settings?tab=billing",
+          actionLabel: "Renew",
         }).catch(() => {});
 
         {

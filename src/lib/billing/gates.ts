@@ -1,18 +1,63 @@
+import { NextResponse } from "next/server";
 import { db, organizations, journalEntries, userRoles } from "@/lib/db";
 import { eq, and, sql, gte } from "drizzle-orm";
-import { PLANS } from "./plans";
+import { ARCHIVE_READONLY_MESSAGE, PLANS } from "./plans";
 
 export type GateResult =
   | { allowed: true }
   | { allowed: false; reason: string; upgradeRequired: boolean };
 
+export { ARCHIVE_READONLY_MESSAGE };
+
+/**
+ * Check if an org may perform create/update/delete mutations.
+ * ARCHIVE plan is read-only (reports and GET APIs remain available).
+ */
+export async function canWrite(orgId: string): Promise<GateResult> {
+  const [org] = await db
+    .select({ subscriptionPlan: organizations.subscriptionPlan })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  if (!org) {
+    return { allowed: false, reason: "Organization not found", upgradeRequired: false };
+  }
+
+  if (org.subscriptionPlan === "ARCHIVE") {
+    return {
+      allowed: false,
+      reason: ARCHIVE_READONLY_MESSAGE,
+      upgradeRequired: true,
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * API helper: return a 403 NextResponse when the org is archived, else null.
+ */
+export async function requireWritableOrg(
+  orgId: string
+): Promise<NextResponse | null> {
+  const gate = await canWrite(orgId);
+  if (!gate.allowed) {
+    return NextResponse.json({ error: gate.reason }, { status: 403 });
+  }
+  return null;
+}
+
 /**
  * Check if an org can create more journal entries this month.
- * FREE plan: 25/month. PRO plan: unlimited.
+ * FREE plan: 25/month. PRO plan: unlimited. ARCHIVE: blocked.
  */
 export async function canCreateJournalEntry(
   orgId: string
 ): Promise<GateResult> {
+  const writeGate = await canWrite(orgId);
+  if (!writeGate.allowed) return writeGate;
+
   const [org] = await db
     .select({ subscriptionPlan: organizations.subscriptionPlan })
     .from(organizations)
@@ -22,7 +67,7 @@ export async function canCreateJournalEntry(
   if (!org) return { allowed: false, reason: "Organization not found", upgradeRequired: false };
 
   const plan = PLANS[org.subscriptionPlan as keyof typeof PLANS];
-  if (!plan) return { allowed: true }; // ARCHIVE or unknown — allow
+  if (!plan) return { allowed: true };
   if (plan.journalEntriesPerMonth === null) return { allowed: true }; // unlimited
 
   // Count JEs created this calendar month
@@ -53,9 +98,12 @@ export async function canCreateJournalEntry(
 
 /**
  * Check if an org can process AI documents (doc scan).
- * FREE plan: 5 lifetime. PRO plan: uses tokens (1 token per doc).
+ * FREE plan: 5 lifetime. PRO plan: uses tokens (1 token per doc). ARCHIVE: blocked.
  */
 export async function canProcessDocument(orgId: string): Promise<GateResult> {
+  const writeGate = await canWrite(orgId);
+  if (!writeGate.allowed) return writeGate;
+
   const [org] = await db
     .select({
       subscriptionPlan: organizations.subscriptionPlan,
@@ -96,9 +144,12 @@ export async function canProcessDocument(orgId: string): Promise<GateResult> {
 
 /**
  * Check if an org can import a bank statement via AI.
- * FREE plan: 1 lifetime. PRO plan: uses tokens (5 tokens per statement).
+ * FREE plan: 1 lifetime. PRO plan: uses tokens (5 tokens per statement). ARCHIVE: blocked.
  */
 export async function canImportStatement(orgId: string): Promise<GateResult> {
+  const writeGate = await canWrite(orgId);
+  if (!writeGate.allowed) return writeGate;
+
   const [org] = await db
     .select({
       subscriptionPlan: organizations.subscriptionPlan,
@@ -140,9 +191,12 @@ export async function canImportStatement(orgId: string): Promise<GateResult> {
 
 /**
  * Check if an org can add more users.
- * FREE: 1 user. PRO: 2 base + extra seats purchased.
+ * FREE: 1 user. PRO: 2 base + extra seats purchased. ARCHIVE: blocked.
  */
 export async function canAddUser(orgId: string): Promise<GateResult> {
+  const writeGate = await canWrite(orgId);
+  if (!writeGate.allowed) return writeGate;
+
   const [org] = await db
     .select({
       subscriptionPlan: organizations.subscriptionPlan,

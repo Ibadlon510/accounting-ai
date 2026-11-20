@@ -4,12 +4,15 @@ import { db } from "@/lib/db";
 import { chartOfAccounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { learnClassification } from "@/lib/ai/classifier";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   let body: { pattern: string; glAccountId: string };
   try {

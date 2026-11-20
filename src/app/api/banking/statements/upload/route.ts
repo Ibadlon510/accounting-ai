@@ -3,6 +3,7 @@ import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
 import { bankStatements, bankStatementLines } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 /** Split a single CSV line into fields, respecting RFC 4180 quoted fields. */
 function splitCSVLine(line: string): string[] {
@@ -100,6 +101,9 @@ function parseCSV(text: string): { date: string; description: string; amount: nu
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   let formData: FormData;
   try {

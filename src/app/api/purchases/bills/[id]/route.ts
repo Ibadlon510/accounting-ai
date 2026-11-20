@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 async function createBillJournalEntry(orgId: string, billId: string) {
   const [bill] = await db
@@ -158,6 +159,9 @@ export async function PATCH(
 ) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Bill ID required" }, { status: 400 });

@@ -17,6 +17,7 @@ import {
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { createOwnerWithdrawalPayment } from "@/lib/banking/services";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET(request: Request) {
   const orgId = await getCurrentOrganizationId();
@@ -125,6 +126,9 @@ type PaymentBody = {
 export async function POST(request: Request) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   let body: PaymentBody;
   try {

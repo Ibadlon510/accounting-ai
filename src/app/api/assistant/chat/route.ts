@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { organizations, auditLogs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 const ASSISTANT_TOKEN_COST = 1; // 1 token per assistant query
 const MIN_BALANCE = ASSISTANT_TOKEN_COST;
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   let body: { message: string; context?: { pathname?: string; entityId?: string } };
   try {
@@ -40,19 +43,13 @@ export async function POST(request: Request) {
   }
 
   const [org] = await db
-    .select({ tokenBalance: organizations.tokenBalance, subscriptionPlan: organizations.subscriptionPlan })
+    .select({ tokenBalance: organizations.tokenBalance })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
-  }
-  if (org.subscriptionPlan === "ARCHIVE") {
-    return NextResponse.json(
-      { error: "Archive mode: read-only. Restore subscription to use the assistant." },
-      { status: 403 }
-    );
   }
   if (Number(org.tokenBalance ?? 0) < MIN_BALANCE) {
     return NextResponse.json(

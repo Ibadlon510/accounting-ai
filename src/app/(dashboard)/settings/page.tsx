@@ -56,6 +56,13 @@ const tabs = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("organization");
 
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && tabs.some((t) => t.id === tab)) {
+      setActiveTab(tab);
+    }
+  }, []);
+
   return (
     <>
       <Breadcrumbs

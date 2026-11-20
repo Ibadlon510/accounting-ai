@@ -11,6 +11,8 @@ import { ViewBillPanel } from "@/components/overlays/view-bill-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordBillPaymentPanel } from "@/components/modals/record-bill-payment-panel";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 type BillLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
@@ -28,6 +30,8 @@ const statusColors: Record<string, string> = {
 };
 
 export default function BillsPage() {
+  const { isArchived } = useIsArchived();
+
   usePageTitle("Bills");
   const [search, setSearch] = useState("");
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -93,7 +97,12 @@ export default function BillsPage() {
           <Input placeholder="Search bills..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
         <ImportExportButtons entity="bills" entityLabel="Bills" onImportComplete={loadBills} />
-        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" /> New Bill
         </Button>
         <CreateBillPanel

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { fiscalYears, accountingPeriods } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getCurrentOrganizationId } from "@/lib/org/server";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -57,6 +58,9 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   let body: { periodId: string };
   try {

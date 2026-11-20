@@ -12,6 +12,8 @@ import { ViewInvoicePanel } from "@/components/overlays/view-invoice-panel";
 import { ViewPaymentPanel } from "@/components/overlays/view-payment-panel";
 import { RecordPaymentPanel } from "@/components/modals/record-payment-panel";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 type InvoiceLine = { id: string; productId?: string; description: string; quantity: number; unitPrice: number; amount: number; taxRate: number; taxAmount: number };
 type ReceiptItem = { type: "document" | "payment"; date: string; amount: number; documentId?: string; paymentId?: string };
@@ -40,6 +42,7 @@ export default function InvoicesPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isArchived } = useIsArchived();
   usePageTitle("Invoices");
 
   function loadInvoices() {
@@ -100,7 +103,12 @@ export default function InvoicesPage() {
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 rounded-xl border-border-subtle bg-surface pl-10 text-[13px] focus-visible:ring-text-primary/20" />
         </div>
         <ImportExportButtons entity="invoices" entityLabel="Invoices" onImportComplete={loadInvoices} />
-        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90">
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" /> New Invoice
         </Button>
         <CreateInvoicePanel open={createOpen} onOpenChange={setCreateOpen} customers={customers} onCustomerCreated={loadCustomers} onCreate={handleCreateInvoice} />

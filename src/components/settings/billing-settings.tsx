@@ -115,6 +115,8 @@ export function BillingSettings() {
 
   const isFree = status.plan === "FREE";
   const isPro = status.plan === "PRO";
+  const isArchive = status.plan === "ARCHIVE";
+  const canSubscribe = isFree || isArchive;
 
   return (
     <div className="space-y-6">
@@ -130,7 +132,9 @@ export function BillingSettings() {
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${
                   isPro
                     ? "bg-accent-yellow/15 text-accent-yellow"
-                    : "bg-text-primary/10 text-text-primary"
+                    : isArchive
+                      ? "bg-slate-200 text-slate-800"
+                      : "bg-text-primary/10 text-text-primary"
                 }`}
               >
                 {isPro && <Crown className="h-3 w-3" />}
@@ -140,7 +144,9 @@ export function BillingSettings() {
             <p className="mt-1 text-[13px] text-text-secondary">
               {isPro
                 ? "You have full access to all features."
-                : "Upgrade to Pro for unlimited features."}
+                : isArchive
+                  ? "This workspace is read-only. Renew Pro to restore full access."
+                  : "Upgrade to Pro for unlimited features."}
             </p>
           </div>
           {status.canManageBilling && isPro && status.hasActiveSubscription && (
@@ -234,19 +240,21 @@ export function BillingSettings() {
         </div>
       </div>
 
-      {/* Upgrade / Token Top-up */}
+      {/* Upgrade / Restore / Token Top-up */}
       {status.canManageBilling && (
         <div className="dashboard-card">
           <h2 className="text-[18px] font-semibold text-text-primary">
-            {isFree ? "Upgrade to Pro" : "Token Top-up"}
+            {isArchive ? "Renew / Restore" : isFree ? "Upgrade to Pro" : "Token Top-up"}
           </h2>
           <p className="mt-1 text-[13px] text-text-secondary">
-            {isFree
-              ? "Unlock unlimited journal entries, AI tokens, and multi-user access."
-              : "Running low on AI tokens? Purchase a top-up pack."}
+            {isArchive
+              ? "Restore Pro to unlock writes, AI processing, and full workspace access."
+              : isFree
+                ? "Unlock unlimited journal entries, AI tokens, and multi-user access."
+                : "Running low on AI tokens? Purchase a top-up pack."}
           </p>
 
-          {isFree && (
+          {canSubscribe && (
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-accent-yellow/10 border border-accent-yellow/25 px-3 py-1 text-[12px] font-bold text-accent-yellow">
               <Rocket className="h-3.5 w-3.5" />
               Launch Offer — 50% Off
@@ -254,7 +262,7 @@ export function BillingSettings() {
           )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {isFree && (
+            {canSubscribe && (
               <>
                 <Button
                   onClick={() => handleCheckout("PRO_MONTHLY")}
@@ -308,6 +316,15 @@ export function BillingSettings() {
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-yellow" />
               <p className="text-[12px] text-text-secondary">
                 Free plan limited to 25 journal entries/month, 5 AI doc scans, and 1 bank statement import (lifetime).
+              </p>
+            </div>
+          )}
+
+          {isArchive && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-slate-100 px-3 py-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" />
+              <p className="text-[12px] text-text-secondary">
+                Archive mode keeps documents and reports available for viewing. Renew to create or edit data again.
               </p>
             </div>
           )}

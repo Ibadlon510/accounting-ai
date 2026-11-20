@@ -4,6 +4,8 @@ import { useState, useRef } from "react";
 import { Download, Upload, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImportDialog } from "./import-dialog";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 interface ImportExportButtonsProps {
   entity: string;
@@ -18,6 +20,7 @@ export function ImportExportButtons({
 }: ImportExportButtonsProps) {
   const [importOpen, setImportOpen] = useState(false);
   const linkRef = useRef<HTMLAnchorElement>(null);
+  const { isArchived } = useIsArchived();
 
   const handleExport = () => {
     const link = linkRef.current;
@@ -61,7 +64,9 @@ export function ImportExportButtons({
           variant="outline"
           size="sm"
           onClick={() => setImportOpen(true)}
-          className="gap-1.5 rounded-xl border-border-subtle text-[13px] text-text-secondary hover:text-text-primary"
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="gap-1.5 rounded-xl border-border-subtle text-[13px] text-text-secondary hover:text-text-primary disabled:opacity-50"
         >
           <Upload className="h-3.5 w-3.5" />
           Import

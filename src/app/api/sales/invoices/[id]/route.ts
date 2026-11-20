@@ -14,6 +14,7 @@ import {
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { sendDocumentEmail } from "@/lib/email/document-email";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const [inv] = await db
@@ -143,6 +144,9 @@ export async function PATCH(
 ) {
   const orgId = await getCurrentOrganizationId();
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
+
 
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Invoice ID required" }, { status: 400 });

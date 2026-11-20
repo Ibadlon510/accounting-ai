@@ -2,8 +2,10 @@
 
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from "react";
 import { cn } from "@/lib/utils";
-import { CloudUpload, FileText, X, Loader2, Camera, RotateCw } from "lucide-react";
+import { CloudUpload, FileText, X, Loader2, Camera, RotateCw, Archive } from "lucide-react";
 import { showError } from "@/lib/utils/toast-helpers";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 const LazyCameraCapture = lazy(() =>
   import("@/components/mobile/camera-capture").then((m) => ({ default: m.CameraCapture }))
@@ -39,6 +41,7 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
   const [showCamera, setShowCamera] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { isArchived } = useIsArchived();
 
   useEffect(() => {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
@@ -46,6 +49,10 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
 
   const handleFiles = useCallback(
     async (fileList: FileList | File[]) => {
+      if (isArchived) {
+        showError("Workspace archived", ARCHIVE_READONLY_MESSAGE);
+        return;
+      }
       const incoming = Array.from(fileList);
       const valid: File[] = [];
 
@@ -113,14 +120,15 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
         }
       }
     },
-    [onUploaded]
+    [onUploaded, isArchived]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isArchived) return;
     setIsDragging(true);
-  }, []);
+  }, [isArchived]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -133,11 +141,15 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
+      if (isArchived) {
+        showError("Workspace archived", ARCHIVE_READONLY_MESSAGE);
+        return;
+      }
       if (e.dataTransfer.files.length > 0) {
         handleFiles(e.dataTransfer.files);
       }
     },
-    [handleFiles]
+    [handleFiles, isArchived]
   );
 
   const retryFile = useCallback(
@@ -190,6 +202,22 @@ export function SmartDropZone({ onUploaded, className }: SmartDropZoneProps) {
   };
 
   const hasFiles = files.length > 0;
+
+  if (isArchived) {
+    return (
+      <div className={cn("w-full", className)}>
+        <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-8 py-8">
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-200 text-slate-600">
+              <Archive className="h-6 w-6" />
+            </div>
+            <p className="text-[14px] font-medium text-slate-900">Uploads disabled in archive mode</p>
+            <p className="mt-1 max-w-md text-[12px] text-slate-600">{ARCHIVE_READONLY_MESSAGE}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("w-full", className)}>

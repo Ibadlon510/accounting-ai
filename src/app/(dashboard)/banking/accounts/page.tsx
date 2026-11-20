@@ -7,6 +7,8 @@ import { Upload, Plus, Loader2, Landmark, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddBankAccountPanel } from "@/components/modals/add-bank-account-panel";
 import { BankAccountCard } from "@/components/banking/bank-account-card";
+import { useIsArchived } from "@/hooks/use-organization";
+import { ARCHIVE_READONLY_MESSAGE } from "@/lib/billing/plans";
 
 type BankAccount = { id: string; accountType?: string; accountName: string; bankName: string; accountNumber?: string; iban: string; swiftCode?: string | null; currency: string; currentBalance: number; isActive: boolean };
 type BankTransaction = { id: string; bankAccountId: string; transactionDate: string; amount: number; type: "debit" | "credit"; isReconciled: boolean };
@@ -107,6 +109,7 @@ function AccountSection({
 
 export default function BankingAccountsPage() {
   const router = useRouter();
+  const { isArchived } = useIsArchived();
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [allTransactions, setAllTransactions] = useState<BankTransaction[]>([]);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -119,6 +122,7 @@ export default function BankingAccountsPage() {
   const creditCardsOnly = useMemo(() => bankAccounts.filter((a) => a.accountType === "credit_card"), [bankAccounts]);
 
   const openAddPanel = (type: AccountType) => {
+    if (isArchived) return;
     setAddAccountType(type);
     setAddAccountOpen(true);
   };
@@ -155,7 +159,9 @@ export default function BankingAccountsPage() {
       <div className="flex items-center justify-end gap-2">
         <Button
           onClick={() => router.push("/documents?upload=bank_statement")}
-          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90"
+          disabled={isArchived}
+          title={isArchived ? ARCHIVE_READONLY_MESSAGE : undefined}
+          className="h-10 gap-2 rounded-xl bg-text-primary px-4 text-[13px] font-semibold text-white hover:bg-text-primary/90 disabled:opacity-50"
         >
           <Upload className="h-4 w-4" /> Import Statement
         </Button>

@@ -8,6 +8,7 @@ type OrgData = {
   id: string;
   name: string;
   currency: string;
+  subscriptionPlan?: string;
   isVatRegistered: boolean;
   taxLabel: string;
   defaultTaxCodeId: string | null;
@@ -29,6 +30,15 @@ export function useOrganization() {
   }, []);
 
   return { org, loading };
+}
+
+/** True when the current org is on ARCHIVE (read-only) plan. */
+export function useIsArchived(): { isArchived: boolean; loading: boolean } {
+  const { org, loading } = useOrganization();
+  return {
+    isArchived: org?.subscriptionPlan === "ARCHIVE",
+    loading,
+  };
 }
 
 /**

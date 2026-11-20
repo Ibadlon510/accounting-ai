@@ -3,6 +3,7 @@ import { getCurrentOrganizationId } from "@/lib/org/server";
 import { db } from "@/lib/db";
 import { chartOfAccounts, accountTypes } from "@/lib/db/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { requireWritableOrg } from "@/lib/billing/gates";
 
 export async function GET() {
   const orgId = await getCurrentOrganizationId();
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const archiveBlock = await requireWritableOrg(orgId);
+  if (archiveBlock) return archiveBlock;
 
   let body: { code?: string; name?: string; accountTypeId?: string; taxCode?: string; description?: string };
   try {

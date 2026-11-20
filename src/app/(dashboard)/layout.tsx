@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { TopNav } from "@/components/layout/top-nav";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
+import { ArchiveModeBanner } from "@/components/billing/archive-mode-banner";
 import { LoginUpsell } from "@/components/overlays/login-upsell";
 import { FormattingInitializer } from "@/components/providers/formatting-provider";
 import { getCurrentOrganizationId } from "@/lib/org/server";
@@ -41,6 +42,7 @@ export default async function DashboardLayout({
       <Suspense fallback={null}>
         <EmailVerificationBanner />
       </Suspense>
+      <ArchiveModeBanner />
       <main className="mx-auto max-w-[1440px] px-8 pb-32">
         {children}
       </main>
