@@ -52,6 +52,18 @@ export async function POST(
     return NextResponse.json({ error: "Document already verified" }, { status: 400 });
   }
 
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  await db.insert(auditLogs).values({
+    organizationId: orgId,
+    userId,
+    action: "document_processing_started",
+    entity: "documents",
+    entityId: documentId,
+    metadata: { documentType: doc.documentType, status: doc.status },
+  }).catch(() => {});
+
   const fileData = await getObjectBytes(doc.s3Key);
   if (!fileData) {
     await db
@@ -90,10 +102,9 @@ export async function POST(
       })
       .where(eq(documents.id, documentId));
 
-    const session = await auth();
     await db.insert(auditLogs).values({
       organizationId: orgId,
-      userId: session?.user?.id,
+      userId,
       action: "document_processing_completed",
       entity: "documents",
       entityId: documentId,
@@ -108,7 +119,8 @@ export async function POST(
     });
   }
 
-  if (!org || Number(org.tokenBalance ?? 0) < 1) {
+  const previousBalance = Number(org?.tokenBalance ?? 0);
+  if (!org || previousBalance < 1) {
     return NextResponse.json(
       { error: "Insufficient token balance. Upgrade or refill to process documents." },
       { status: 402 }
@@ -160,13 +172,28 @@ export async function POST(
     })
     .where(eq(documents.id, documentId));
 
+  const amount = 1;
+  const newBalance = Math.max(0, previousBalance - amount);
   await db
     .update(organizations)
-    .set({ tokenBalance: Math.max(0, Number(org.tokenBalance ?? 0) - 1) })
+    .set({ tokenBalance: newBalance })
     .where(eq(organizations.id, orgId));
 
-  const session = await auth();
-  const userId = session?.user?.id;
+  await db.insert(auditLogs).values({
+    organizationId: orgId,
+    userId,
+    action: "token_decremented",
+    entity: "organizations",
+    entityId: orgId,
+    metadata: {
+      amount,
+      reason: "document_processing",
+      documentId,
+      previousBalance,
+      newBalance,
+    },
+  }).catch(() => {});
+
   await db.insert(auditLogs).values({
     organizationId: orgId,
     userId,

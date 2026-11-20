@@ -95,15 +95,31 @@ export async function POST(request: Request) {
       );
     }
 
+    const previousBalance = Number(org.tokenBalance ?? 0);
+    const newBalance = Math.max(0, previousBalance - ASSISTANT_TOKEN_COST);
     await db
       .update(organizations)
       .set({
-        tokenBalance: Math.max(0, Number(org.tokenBalance ?? 0) - ASSISTANT_TOKEN_COST),
+        tokenBalance: newBalance,
       })
       .where(eq(organizations.id, orgId));
 
     const session = await auth();
     const userId = session?.user?.id;
+    await db.insert(auditLogs).values({
+      organizationId: orgId,
+      userId,
+      action: "token_decremented",
+      entity: "organizations",
+      entityId: orgId,
+      metadata: {
+        amount: ASSISTANT_TOKEN_COST,
+        reason: "assistant_query",
+        previousBalance,
+        newBalance,
+        pathname: body.context?.pathname,
+      },
+    }).catch(() => {});
     await db.insert(auditLogs).values({
       organizationId: orgId,
       userId,

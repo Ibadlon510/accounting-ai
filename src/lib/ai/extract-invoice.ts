@@ -49,7 +49,7 @@ Structure:
     "net_amount": number (float)
   },
   "gl_prediction": {
-    "code": "string (e.g., '6340 - Meals & Entertainment')",
+    "code": "string (e.g., '6400 - Travel & Entertainment')",
     "confidence": number (0.0 to 1.0)
   },
   "validation": {
