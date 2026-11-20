@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { formatNumber } from "@/lib/accounting/engine";
 import {
   Search, Plus, Package, AlertTriangle, LayoutDashboard, Settings,
-  RefreshCw, Sparkles, X, Box, BarChart3,
+  RefreshCw, Sparkles, X, Box, BarChart3, ArrowDownUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,49 @@ type Item = {
   totalValue?: number;
 };
 
+type StockMovement = {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemSku: string | null;
+  movementType: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  referenceType: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+function formatMovementDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function movementTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    purchase: "Purchase",
+    sale: "Sale / COGS",
+    adjustment: "Adjustment",
+    transfer: "Transfer",
+  };
+  return labels[type] ?? type;
+}
+
 export default function InventoryPage() {
   usePageTitle("Inventory");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(true);
   const [showCustomize, setShowCustomize] = useState(false);
   const [dismissedInsight, setDismissedInsight] = useState(false);
   const { isVisible } = useDashboardPillPreferences("inventory");
@@ -65,9 +103,19 @@ export default function InventoryPage() {
       .catch(() => {});
   }, []);
 
+  const loadMovements = useCallback(() => {
+    setMovementsLoading(true);
+    fetch("/api/inventory/movements", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { movements: [] }))
+      .then((d) => setMovements(d.movements ?? []))
+      .catch(() => setMovements([]))
+      .finally(() => setMovementsLoading(false));
+  }, []);
+
   useEffect(() => {
     loadItems();
-  }, [loadItems]);
+    loadMovements();
+  }, [loadItems, loadMovements]);
 
   const stats = {
     totalItems: items.length,
@@ -316,6 +364,100 @@ export default function InventoryPage() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-10 mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-text-primary/5">
+            <ArrowDownUp className="h-4 w-4 text-text-primary" strokeWidth={1.8} />
+          </div>
+          <div>
+            <h2 className="text-[15px] font-semibold text-text-primary">Stock movements</h2>
+            <p className="text-[12px] text-text-secondary">
+              Purchases, sales (COGS), and adjustments against your items
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadMovements}
+          className="rounded-xl text-[12px]"
+          disabled={movementsLoading}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${movementsLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="dashboard-card overflow-hidden !p-0 mb-8">
+        <div className="grid grid-cols-12 gap-3 border-b border-border-subtle bg-canvas/50 px-6 py-3 text-[12px] font-medium uppercase tracking-wide text-text-meta">
+          <div className="col-span-2">Date</div>
+          <div className="col-span-3">Item</div>
+          <div className="col-span-2">Type</div>
+          <div className="col-span-1 text-right">Qty</div>
+          <div className="col-span-2 text-right">Unit cost</div>
+          <div className="col-span-2 text-right">Total</div>
+        </div>
+
+        {movementsLoading && (
+          <div className="px-6 py-8 text-[13px] text-text-meta">Loading movements…</div>
+        )}
+
+        {!movementsLoading && movements.length === 0 && (
+          <div className="px-6 py-8 text-[13px] text-text-meta">
+            No stock movements yet. Purchases, sales, and adjustments will appear here.
+          </div>
+        )}
+
+        {!movementsLoading &&
+          movements.map((m) => {
+            const qtyPositive = m.quantity > 0;
+            return (
+              <div
+                key={m.id}
+                className="grid grid-cols-12 gap-3 border-b border-border-subtle/50 px-6 py-3 text-[13px] transition-colors hover:bg-black/[0.01]"
+              >
+                <div className="col-span-2 text-text-secondary">{formatMovementDate(m.createdAt)}</div>
+                <div className="col-span-3">
+                  <p className="font-medium text-text-primary">{m.itemName}</p>
+                  {m.itemSku && (
+                    <p className="font-mono text-[11px] text-text-meta">{m.itemSku}</p>
+                  )}
+                  {m.notes && (
+                    <p className="mt-0.5 text-[11px] text-text-meta line-clamp-1">{m.notes}</p>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      m.movementType === "sale"
+                        ? "bg-error-light text-error"
+                        : m.movementType === "purchase"
+                          ? "bg-success-light text-success"
+                          : "bg-muted text-text-meta"
+                    }`}
+                  >
+                    {movementTypeLabel(m.movementType)}
+                  </span>
+                </div>
+                <div
+                  className={`col-span-1 text-right font-mono font-medium ${
+                    qtyPositive ? "text-success" : "text-error"
+                  }`}
+                >
+                  {qtyPositive ? "+" : ""}
+                  {m.quantity}
+                </div>
+                <div className="col-span-2 text-right font-mono text-text-secondary">
+                  AED {formatNumber(m.unitCost)}
+                </div>
+                <div className="col-span-2 text-right font-mono font-medium text-text-primary">
+                  AED {formatNumber(m.totalCost)}
+                </div>
+              </div>
+            );
+          })}
       </div>
     </>
   );
