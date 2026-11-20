@@ -18,6 +18,7 @@ import {
   Grid3X3,
   FolderOpen,
   LogOut,
+  Users,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationCenter } from "@/components/notifications/notification-center";
@@ -45,6 +46,7 @@ const baseNavItems = [
   { icon: FolderOpen, label: "Documents", href: "/documents" },
   { icon: Package, label: "Inventory", href: "/inventory" },
   { icon: Landmark, label: "Banking", href: "/banking" },
+  { icon: Users, label: "Payroll", href: "/payroll" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
   { icon: Receipt, label: "VAT", href: "/vat" },
   { icon: Settings, label: "Settings", href: "/settings" },
