@@ -14,9 +14,17 @@ import {
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
 import { sendDocumentEmail } from "@/lib/email/document-email";
+import { applyInvoiceStockOut } from "@/lib/inventory/stock-movements";
 
-async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
-  const [inv] = await db
+type DbClient = typeof db;
+type TxClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function createInvoiceJournalEntry(
+  orgId: string,
+  invoiceId: string,
+  client: DbClient | TxClient = db
+) {
+  const [inv] = await (client as DbClient)
     .select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
@@ -34,13 +42,17 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
 
   if (!inv || inv.journalEntryId) return;
 
-  const [org] = await db
+  const [org] = await (client as DbClient)
     .select({ isVatRegistered: organizations.isVatRegistered })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, inv.customerId)).limit(1);
+  const [cust] = await (client as DbClient)
+    .select({ name: customers.name })
+    .from(customers)
+    .where(eq(customers.id, inv.customerId))
+    .limit(1);
   const customerName = cust?.name ?? "Customer";
 
   const total = parseFloat(inv.total ?? "0");
@@ -48,27 +60,42 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
   const taxAmount = parseFloat(inv.taxAmount ?? "0");
   if (total <= 0) return;
 
-  const periodId = await resolveOrCreatePeriod(orgId, inv.issueDate);
+  const periodId = await resolveOrCreatePeriod(orgId, inv.issueDate, client);
   if (!periodId) return;
 
-  const [arAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210"))).limit(1);
-  const [salesAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "4000"))).limit(1);
-  const [vatAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200"))).limit(1);
+  const [arAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1210")))
+    .limit(1);
+  const [salesAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "4000")))
+    .limit(1);
+  const [vatAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2200")))
+    .limit(1);
 
   if (!arAccount || !salesAccount) return;
 
-  const lines = await db
+  const lines = await (client as DbClient)
     .select({ taxCode: invoiceLines.taxCode, taxAmount: invoiceLines.taxAmount })
     .from(invoiceLines)
     .where(eq(invoiceLines.invoiceId, inv.id));
   const primaryTaxCode = lines.find((l) => l.taxCode)?.taxCode || "SR";
 
   const ym = inv.issueDate.slice(0, 7).replace("-", "");
-  const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
+  const [entryCountRow] = await (client as DbClient)
+    .select({ c: count() })
+    .from(journalEntries)
+    .where(eq(journalEntries.organizationId, orgId));
   const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
   const entryNumber = `JE-${ym}-${seq}`;
 
-  const [je] = await db
+  const [je] = await (client as DbClient)
     .insert(journalEntries)
     .values({
       organizationId: orgId,
@@ -133,8 +160,11 @@ async function createInvoiceJournalEntry(orgId: string, invoiceId: string) {
     });
   }
 
-  if (jl.length > 0) await db.insert(journalLines).values(jl);
-  await db.update(invoices).set({ journalEntryId: je.id }).where(eq(invoices.id, inv.id));
+  if (jl.length > 0) await (client as DbClient).insert(journalLines).values(jl);
+  await (client as DbClient)
+    .update(invoices)
+    .set({ journalEntryId: je.id })
+    .where(eq(invoices.id, inv.id));
 }
 
 export async function PATCH(
@@ -166,7 +196,14 @@ export async function PATCH(
 
   try {
     const [existing] = await db
-      .select({ id: invoices.id, status: invoices.status, journalEntryId: invoices.journalEntryId })
+      .select({
+        id: invoices.id,
+        status: invoices.status,
+        journalEntryId: invoices.journalEntryId,
+        invoiceNumber: invoices.invoiceNumber,
+        issueDate: invoices.issueDate,
+        currency: invoices.currency,
+      })
       .from(invoices)
       .where(and(eq(invoices.id, id), eq(invoices.organizationId, orgId)))
       .limit(1);
@@ -175,23 +212,54 @@ export async function PATCH(
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
-    const [updated] = await db
-      .update(invoices)
-      .set({ status })
-      .where(and(eq(invoices.id, id), eq(invoices.organizationId, orgId)))
-      .returning({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        status: invoices.status,
-      });
+    const shouldPost =
+      status === "sent" && existing.status === "draft";
 
-    // Create JE when invoice moves from draft to sent/confirmed (and no JE yet)
-    if (status === "sent" && existing.status === "draft" && !existing.journalEntryId) {
-      await createInvoiceJournalEntry(orgId, id);
+    let updated: { id: string; invoiceNumber: string; status: string } | undefined;
+
+    if (shouldPost) {
+      // Status + AR/sales JE + inventory/COGS in one transaction
+      updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(invoices)
+          .set({ status })
+          .where(and(eq(invoices.id, id), eq(invoices.organizationId, orgId)))
+          .returning({
+            id: invoices.id,
+            invoiceNumber: invoices.invoiceNumber,
+            status: invoices.status,
+          });
+
+        if (!existing.journalEntryId) {
+          await createInvoiceJournalEntry(orgId, id, tx);
+        }
+
+        await applyInvoiceStockOut({
+          organizationId: orgId,
+          invoiceId: id,
+          invoiceNumber: existing.invoiceNumber,
+          entryDate: existing.issueDate,
+          currency: existing.currency ?? "AED",
+          tx,
+        });
+
+        return row;
+      });
+    } else {
+      const [row] = await db
+        .update(invoices)
+        .set({ status })
+        .where(and(eq(invoices.id, id), eq(invoices.organizationId, orgId)))
+        .returning({
+          id: invoices.id,
+          invoiceNumber: invoices.invoiceNumber,
+          status: invoices.status,
+        });
+      updated = row;
     }
 
     // Auto-send invoice email on confirmation if org setting enabled
-    if (status === "sent" && existing.status === "draft") {
+    if (shouldPost) {
       try {
         const [org] = await db
           .select({ autoSend: organizations.autoSendOnInvoiceConfirm })

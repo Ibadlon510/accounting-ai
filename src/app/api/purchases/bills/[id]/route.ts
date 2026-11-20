@@ -12,9 +12,20 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { resolveOrCreatePeriod } from "@/lib/banking/period";
+import {
+  applyBillStockIn,
+  resolveBillLineDebitAccount,
+} from "@/lib/inventory/stock-movements";
 
-async function createBillJournalEntry(orgId: string, billId: string) {
-  const [bill] = await db
+type DbClient = typeof db;
+type TxClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function createBillJournalEntry(
+  orgId: string,
+  billId: string,
+  client: DbClient | TxClient = db
+) {
+  const [bill] = await (client as DbClient)
     .select({
       id: bills.id,
       billNumber: bills.billNumber,
@@ -32,48 +43,66 @@ async function createBillJournalEntry(orgId: string, billId: string) {
 
   if (!bill || bill.journalEntryId) return; // already has JE
 
-  const [org] = await db
+  const [org] = await (client as DbClient)
     .select({ isVatRegistered: organizations.isVatRegistered })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  const [supp] = await db.select({ name: suppliers.name }).from(suppliers).where(eq(suppliers.id, bill.supplierId)).limit(1);
+  const [supp] = await (client as DbClient)
+    .select({ name: suppliers.name })
+    .from(suppliers)
+    .where(eq(suppliers.id, bill.supplierId))
+    .limit(1);
   const supplierName = supp?.name ?? "Supplier";
 
   const total = parseFloat(bill.total ?? "0");
-  const subtotal = parseFloat(bill.subtotal ?? "0");
-  const taxAmount = parseFloat(bill.taxAmount ?? "0");
   if (total <= 0) return;
 
   // Get bill lines for per-line GL posting
-  const lines = await db
+  const lines = await (client as DbClient)
     .select({
       description: billLines.description,
       amount: billLines.amount,
       taxAmount: billLines.taxAmount,
       taxCode: billLines.taxCode,
       accountId: billLines.accountId,
+      itemId: billLines.itemId,
     })
     .from(billLines)
     .where(eq(billLines.billId, billId))
     .orderBy(billLines.lineOrder);
 
-  const periodId = await resolveOrCreatePeriod(orgId, bill.issueDate);
+  const periodId = await resolveOrCreatePeriod(orgId, bill.issueDate, client);
   if (!periodId) return;
 
-  const [defaultExpenseAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "6300"))).limit(1);
-  const [vatInputAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450"))).limit(1);
-  const [apAccount] = await db.select({ id: chartOfAccounts.id }).from(chartOfAccounts).where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010"))).limit(1);
+  const [defaultExpenseAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "6300")))
+    .limit(1);
+  const [vatInputAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "1450")))
+    .limit(1);
+  const [apAccount] = await (client as DbClient)
+    .select({ id: chartOfAccounts.id })
+    .from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.organizationId, orgId), eq(chartOfAccounts.code, "2010")))
+    .limit(1);
 
   if (!apAccount) return;
 
   const ym = bill.issueDate.slice(0, 7).replace("-", "");
-  const [entryCountRow] = await db.select({ c: count() }).from(journalEntries).where(eq(journalEntries.organizationId, orgId));
+  const [entryCountRow] = await (client as DbClient)
+    .select({ c: count() })
+    .from(journalEntries)
+    .where(eq(journalEntries.organizationId, orgId));
   const seq = (Number(entryCountRow?.c ?? 0) + 1).toString().padStart(4, "0");
   const entryNumber = `JE-${ym}-${seq}`;
 
-  const [je] = await db
+  const [je] = await (client as DbClient)
     .insert(journalEntries)
     .values({
       organizationId: orgId,
@@ -99,7 +128,13 @@ async function createBillJournalEntry(orgId: string, billId: string) {
   let lineOrder = 1;
 
   for (const l of lines) {
-    const lineGl = l.accountId || defaultExpenseAccount?.id;
+    const resolved = await resolveBillLineDebitAccount({
+      organizationId: orgId,
+      itemId: l.itemId,
+      fallbackExpenseAccountId: l.accountId || defaultExpenseAccount?.id,
+      tx: client,
+    });
+    const lineGl = resolved.accountId;
     const net = parseFloat(l.amount ?? "0");
     const tax = parseFloat(l.taxAmount ?? "0");
     if (net > 0 && lineGl) {
@@ -107,7 +142,9 @@ async function createBillJournalEntry(orgId: string, billId: string) {
         journalEntryId: je.id,
         organizationId: orgId,
         accountId: lineGl,
-        description: `${supplierName} — ${l.description?.trim() || "expense"}`,
+        description: resolved.isStock
+          ? `Inventory — ${resolved.itemName ?? (l.description?.trim() || "stock")}`
+          : `${supplierName} — ${l.description?.trim() || "expense"}`,
         debit: String(net),
         credit: "0",
         currency: cur,
@@ -148,8 +185,11 @@ async function createBillJournalEntry(orgId: string, billId: string) {
     lineOrder: lineOrder++,
   });
 
-  if (jl.length > 0) await db.insert(journalLines).values(jl);
-  await db.update(bills).set({ journalEntryId: je.id }).where(eq(bills.id, bill.id));
+  if (jl.length > 0) await (client as DbClient).insert(journalLines).values(jl);
+  await (client as DbClient)
+    .update(bills)
+    .set({ journalEntryId: je.id })
+    .where(eq(bills.id, bill.id));
 }
 
 export async function PATCH(
@@ -181,7 +221,12 @@ export async function PATCH(
 
   try {
     const [existing] = await db
-      .select({ id: bills.id, status: bills.status, journalEntryId: bills.journalEntryId })
+      .select({
+        id: bills.id,
+        status: bills.status,
+        journalEntryId: bills.journalEntryId,
+        billNumber: bills.billNumber,
+      })
       .from(bills)
       .where(and(eq(bills.id, id), eq(bills.organizationId, orgId)))
       .limit(1);
@@ -190,19 +235,47 @@ export async function PATCH(
       return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     }
 
-    const [updated] = await db
-      .update(bills)
-      .set({ status })
-      .where(and(eq(bills.id, id), eq(bills.organizationId, orgId)))
-      .returning({
-        id: bills.id,
-        billNumber: bills.billNumber,
-        status: bills.status,
-      });
+    const shouldPost = status === "received" && existing.status === "draft";
 
-    // Create JE when bill moves from draft to received/confirmed (and no JE yet)
-    if (status === "received" && existing.status === "draft" && !existing.journalEntryId) {
-      await createBillJournalEntry(orgId, id);
+    let updated: { id: string; billNumber: string; status: string } | undefined;
+
+    if (shouldPost) {
+      // Status + AP/expense-or-inventory JE + stock in / weighted avg in one transaction
+      updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(bills)
+          .set({ status })
+          .where(and(eq(bills.id, id), eq(bills.organizationId, orgId)))
+          .returning({
+            id: bills.id,
+            billNumber: bills.billNumber,
+            status: bills.status,
+          });
+
+        if (!existing.journalEntryId) {
+          await createBillJournalEntry(orgId, id, tx);
+        }
+
+        await applyBillStockIn({
+          organizationId: orgId,
+          billId: id,
+          billNumber: existing.billNumber,
+          tx,
+        });
+
+        return row;
+      });
+    } else {
+      const [row] = await db
+        .update(bills)
+        .set({ status })
+        .where(and(eq(bills.id, id), eq(bills.organizationId, orgId)))
+        .returning({
+          id: bills.id,
+          billNumber: bills.billNumber,
+          status: bills.status,
+        });
+      updated = row;
     }
 
     return NextResponse.json({ bill: updated });
