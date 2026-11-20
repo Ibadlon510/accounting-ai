@@ -1037,3 +1037,64 @@ export const creditApplications = pgTable("credit_applications", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   appliedBy: uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// ─── Expense Claims (staff → manager → reimbursement JE) ────
+// Reimbursement ledger postings are immutable (reverse-only).
+export const expenseClaims = pgTable("expense_claims", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  claimNumber: varchar("claim_number", { length: 30 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  claimDate: date("claim_date").notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  claimantName: varchar("claimant_name", { length: 255 }).notNull(),
+  submittedBy: uuid("submitted_by").references(() => users.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 20 }).notNull().default("submitted"), // submitted, approved, rejected, reimbursed
+  currency: varchar("currency", { length: 3 }).notNull().default("AED"),
+  subtotal: numeric("subtotal", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 18, scale: 2 }).notNull().default("0"),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedBy: uuid("rejected_by").references(() => users.id, { onDelete: "set null" }),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
+  reimbursementMethod: varchar("reimbursement_method", { length: 20 }), // cash | payable
+  creditAccountId: uuid("credit_account_id").references(() => chartOfAccounts.id),
+  reimbursedAt: timestamp("reimbursed_at", { withTimezone: true }),
+  reimbursedBy: uuid("reimbursed_by").references(() => users.id, { onDelete: "set null" }),
+  journalEntryId: uuid("journal_entry_id"),
+  notes: text("notes"),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("expense_claims_org_number_idx").on(t.organizationId, t.claimNumber),
+  index("expense_claims_org_status_idx").on(t.organizationId, t.status),
+]);
+
+export const expenseClaimLines = pgTable("expense_claim_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  expenseClaimId: uuid("expense_claim_id")
+    .notNull()
+    .references(() => expenseClaims.id, { onDelete: "cascade" }),
+  expenseDate: date("expense_date"),
+  description: text("description").notNull().default(""),
+  category: varchar("category", { length: 50 }).notNull().default("travel"),
+  expenseAccountId: uuid("expense_account_id")
+    .notNull()
+    .references(() => chartOfAccounts.id),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  lineOrder: integer("line_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("expense_claim_lines_claim_idx").on(t.expenseClaimId),
+  index("expense_claim_lines_org_idx").on(t.organizationId),
+]);
