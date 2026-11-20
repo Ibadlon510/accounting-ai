@@ -32,7 +32,31 @@ In the Render Dashboard, add these to the **web service**:
 | `AWS_ACCESS_KEY_ID` | For document vault | AWS IAM |
 | `AWS_SECRET_ACCESS_KEY` | For document vault | AWS IAM |
 | `AWS_REGION` | For document vault | e.g. `me-central-1` |
-| `DOCUMENT_VAULT_BUCKET` | For document vault | S3 bucket name |
+| `DOCUMENT_VAULT_BUCKET` | For document vault | S3 bucket name (Object Lock enabled — see below) |
+| `DOCUMENT_VAULT_OBJECT_LOCK_MODE` | Optional | `COMPLIANCE` (default) or `GOVERNANCE` |
+
+## 2b. Document Vault S3 bucket (Object Lock + 7-year retention)
+
+Verified documents are copied from `temp/` to `retention-vault/` with **S3 Object Lock** so they cannot be deleted or overwritten until the retain-until date (now + **7 years**, UAE FTA / blueprint requirement).
+
+**Bucket prerequisites (production):**
+
+1. **Region:** create the bucket in `me-central-1` (UAE).
+2. **Object Lock:** enable Object Lock **at bucket create time** (AWS does not allow enabling it later on an existing bucket). Use versioning (required with Object Lock).
+3. **Prefixes:**
+   - `temp/{orgId}/{documentId}/…` — uploads before verify (no lock required).
+   - `retention-vault/{orgId}/{documentId}/…` — verified documents; app sets Object Lock on copy (`COMPLIANCE` by default, retain-until = now + 7 years).
+4. **IAM:** the app credentials need `s3:GetObject`, `s3:PutObject`, `s3:PutObjectRetention` (and related copy permissions) on the bucket.
+
+**Local / dev without Object Lock:** if the bucket was created without Object Lock, `moveToRetentionVault` logs a clear warning and still copies to `retention-vault/` **without** a lock so document verify keeps working. That path is **not** WORM-compliant — use a lock-enabled bucket for production.
+
+**Optional mode:** set `DOCUMENT_VAULT_OBJECT_LOCK_MODE=GOVERNANCE` for staging (privileged bypass possible). Prefer `COMPLIANCE` in production.
+
+Quick connectivity check (does not assert Object Lock):
+
+```bash
+node scripts/check-s3-vault.mjs
+```
 
 ## 3. Google OAuth Setup
 
@@ -80,4 +104,4 @@ npm run dev
 - **Database**: PostgreSQL on Render, Drizzle ORM
 - **Email**: Resend
 - **AI**: Google Gemini, OpenAI
-- **Storage**: AWS S3 (document vault)
+- **Storage**: AWS S3 document vault (`temp/` → `retention-vault/` with Object Lock, 7-year retention)

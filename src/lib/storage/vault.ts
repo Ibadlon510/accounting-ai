@@ -9,6 +9,45 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const region = process.env.AWS_REGION ?? "me-central-1";
 const bucket = process.env.DOCUMENT_VAULT_BUCKET;
 
+/** UAE FTA / blueprint: mandatory 7-year document retention. */
+export const RETENTION_YEARS = 7;
+
+/** Default COMPLIANCE (WORM); set DOCUMENT_VAULT_OBJECT_LOCK_MODE=GOVERNANCE for staging. */
+export type ObjectLockMode = "COMPLIANCE" | "GOVERNANCE";
+
+function getObjectLockMode(): ObjectLockMode {
+  const raw = (process.env.DOCUMENT_VAULT_OBJECT_LOCK_MODE ?? "COMPLIANCE").toUpperCase();
+  return raw === "GOVERNANCE" ? "GOVERNANCE" : "COMPLIANCE";
+}
+
+/** Retain-until date = now + RETENTION_YEARS (UTC). */
+export function getRetentionRetainUntilDate(from: Date = new Date()): Date {
+  const retainUntil = new Date(from.getTime());
+  retainUntil.setUTCFullYear(retainUntil.getUTCFullYear() + RETENTION_YEARS);
+  return retainUntil;
+}
+
+function isObjectLockUnavailableError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; Code?: string; message?: string; Message?: string };
+  const code = e.name ?? e.Code ?? "";
+  const message = (e.message ?? e.Message ?? "").toLowerCase();
+  if (code === "ObjectLockConfigurationNotFoundError") return true;
+  if (code === "InvalidRequest" && message.includes("object lock")) return true;
+  if (message.includes("object lock configuration") || message.includes("object lock")) {
+    // Bucket created without Object Lock, or lock headers rejected.
+    if (
+      message.includes("missing") ||
+      message.includes("not enabled") ||
+      message.includes("does not have") ||
+      message.includes("object lock configuration")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function getClient(): S3Client | null {
   if (!bucket || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
     return null;
@@ -48,8 +87,13 @@ export async function uploadToTemp(params: {
 }
 
 /**
- * Copy object from temp to retention-vault. Key: retention-vault/{orgId}/{documentId}/{fileName}
- * Optionally add Object Lock retention (if bucket has lock enabled).
+ * Copy object from temp to retention-vault with S3 Object Lock (7-year retention).
+ * Key: retention-vault/{orgId}/{documentId}/{fileName}
+ *
+ * Applies ObjectLockMode (COMPLIANCE by default) and ObjectLockRetainUntilDate = now + 7 years.
+ * If the bucket does not have Object Lock enabled (typical local/dev buckets), logs a warning
+ * and copies without lock so verify still succeeds. Production buckets must enable Object Lock
+ * at create time — see DEPLOYMENT.md.
  */
 export async function moveToRetentionVault(params: {
   sourceKey: string;
@@ -61,13 +105,39 @@ export async function moveToRetentionVault(params: {
   if (!client) return null;
 
   const destKey = `retention-vault/${params.orgId}/${params.documentId}/${params.fileName}`;
-  await client.send(
-    new CopyObjectCommand({
-      Bucket: bucket!,
-      CopySource: `${bucket}/${params.sourceKey}`,
-      Key: destKey,
-    })
-  );
+  const copySource = `${bucket}/${params.sourceKey}`;
+  const mode = getObjectLockMode();
+  const retainUntil = getRetentionRetainUntilDate();
+
+  try {
+    await client.send(
+      new CopyObjectCommand({
+        Bucket: bucket!,
+        CopySource: copySource,
+        Key: destKey,
+        ObjectLockMode: mode,
+        ObjectLockRetainUntilDate: retainUntil,
+      })
+    );
+  } catch (err) {
+    if (!isObjectLockUnavailableError(err)) {
+      throw err;
+    }
+    console.warn(
+      "[vault] Object Lock not available on bucket; copying to retention-vault without lock. " +
+        "Enable Object Lock at bucket create time for production 7-year WORM retention. " +
+        `Bucket=${bucket} mode=${mode} retainUntil=${retainUntil.toISOString()}`,
+      err instanceof Error ? err.message : err
+    );
+    await client.send(
+      new CopyObjectCommand({
+        Bucket: bucket!,
+        CopySource: copySource,
+        Key: destKey,
+      })
+    );
+  }
+
   return destKey;
 }
 
